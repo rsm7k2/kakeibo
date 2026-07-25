@@ -13,4 +13,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "kakeibo-db"
-database_id = "<database_id>"
+database_id = "27fafb27-f552-403b-b8fb-38fd50a3dd38"

@@ -18,15 +18,33 @@ export default {
 }
 
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
-  // 例: GET /api/categories 一覧取得
+  // GET /api/categories 一覧取得(type=income|expense でフィルタ可能)
   if (url.pathname === '/api/categories' && request.method === 'GET') {
+    const type = url.searchParams.get('type')
+    const stmt = type
+      ? env.DB.prepare('SELECT * FROM categories WHERE type = ? ORDER BY sort_order').bind(type)
+      : env.DB.prepare('SELECT * FROM categories ORDER BY sort_order')
+    const { results } = await stmt.all()
+    return Response.json(results)
+  }
+
+  // GET /api/scopes 一覧取得
+  if (url.pathname === '/api/scopes' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
-      'SELECT * FROM categories ORDER BY sort_order'
+      'SELECT * FROM scopes ORDER BY sort_order'
     ).all()
     return Response.json(results)
   }
 
-  // 例: POST /api/transactions 新規登録
+  // GET /api/payment_methods 一覧取得
+  if (url.pathname === '/api/payment_methods' && request.method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM payment_methods ORDER BY sort_order'
+    ).all()
+    return Response.json(results)
+  }
+
+  // POST /api/transactions 新規登録
   if (url.pathname === '/api/transactions' && request.method === 'POST') {
     const body = await request.json<{
       type: string
@@ -38,6 +56,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       memo: string | null
     }>()
 
+    // サーバー側バリデーション(必須項目・値の妥当性チェック)
+    const errors: string[] = []
+    if (body.type !== 'income' && body.type !== 'expense') {
+      errors.push('type は income または expense を指定してください')
+    }
+    if (typeof body.amount !== 'number' || !(body.amount > 0)) {
+      errors.push('amount は0より大きい数値を指定してください')
+    }
+    if (!body.category_id) errors.push('category_id は必須です')
+    if (!body.scope_id) errors.push('scope_id は必須です')
+    if (!body.transaction_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.transaction_date)) {
+      errors.push('transaction_date は YYYY-MM-DD 形式で指定してください')
+    }
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
     const result = await env.DB.prepare(
       `INSERT INTO transactions
         (type, amount, category_id, scope_id, payment_method_id, transaction_date, memo)
@@ -48,16 +83,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         body.amount,
         body.category_id,
         body.scope_id,
-        body.payment_method_id,
+        body.payment_method_id ?? null,
         body.transaction_date,
-        body.memo
+        body.memo ?? null
       )
       .run()
 
     return Response.json({ id: result.meta.last_row_id }, { status: 201 })
   }
 
-  // 各エンドポイント(scopes, payment_methods, budgets, レポート集計等)は
-  // 画面実装のタイミングで順次追加してください
+  // 各エンドポイント(budgets, レポート集計等)は該当画面の実装時に順次追加してください
   return new Response('Not Found', { status: 404 })
 }

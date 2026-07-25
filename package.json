@@ -9,14 +9,17 @@
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 execute kakeibo-db --local --file=./migrations/0001_init.sql",
-    "db:migrate:remote": "wrangler d1 execute kakeibo-db --remote --file=./migrations/0001_init.sql"
+    "db:migrate:remote": "wrangler d1 execute kakeibo-db --remote --file=./migrations/0001_init.sql",
+    "db:migrate:local:0002": "wrangler d1 execute kakeibo-db --local --file=./migrations/0002_csv_fixed_cost.sql",
+    "db:migrate:remote:0002": "wrangler d1 execute kakeibo-db --remote --file=./migrations/0002_csv_fixed_cost.sql"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "@holiday-jp/holiday_jp": "^2.5.1",
     "chart.js": "^4.4.4",
     "chartjs-plugin-datalabels": "^2.2.0",
-    "react-chartjs-2": "^5.2.0"
+    "react": "^18.3.1",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",

@@ -24,6 +24,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const [scopeId, setScopeId] = useState<number | null>(null)
   const [paymentMethodId, setPaymentMethodId] = useState<number | null>(null)
   const [memo, setMemo] = useState('')
+  const [isFixedCost, setIsFixedCost] = useState(false)
 
   // 編集対象のトランザクションID(nullなら新規登録モード)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -78,6 +79,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       setScopeId(editTransaction.scope_id)
       setPaymentMethodId(editTransaction.payment_method_id)
       setMemo(editTransaction.memo ?? '')
+      setIsFixedCost(!!editTransaction.is_fixed_cost)
       setEditingId(editTransaction.id)
       // 直前の新規登録による「保存しました」がまだ残っていれば、編集画面に入る時点で消す
       if (savedMessageTimerRef.current) {
@@ -120,6 +122,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     setDate(todayJst())
     setMemo('')
     setPaymentMethodId(null)
+    setIsFixedCost(false)
     setEditingId(null)
     // カテゴリ・範囲・種別は連続入力しやすいよう保持する
   }
@@ -171,7 +174,8 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         scope_id: scopeId,
         payment_method_id: paymentMethodId,
         transaction_date: date,
-        memo: memo || null
+        memo: memo || null,
+        is_fixed_cost: isFixedCost
       }
       if (editingId) {
         await api.put(`/transactions/${editingId}`, payload)
@@ -449,6 +453,17 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
           ))}
         </select>
       </div>
+
+      {/* 固定費フラグ(任意) */}
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={isFixedCost}
+          onChange={(e) => setIsFixedCost(e.target.checked)}
+          className="w-4 h-4"
+        />
+        固定費として記録する
+      </label>
 
       </div>
 

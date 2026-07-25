@@ -286,6 +286,11 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                           >
                             {t.scope_name}
                           </span>
+                          {!!t.is_fixed_cost && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                              固定費
+                            </span>
+                          )}
                           {t.payment_method_name && (
                             <span className="text-[10px] text-gray-400 truncate">
                               {t.payment_method_name}

@@ -14,3 +14,7 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "kakeibo-db"
 database_id = "27fafb27-f552-403b-b8fb-38fd50a3dd38"
+
+# 固定費ルールの日次自動生成(毎日 00:10 JST = 15:10 UTC に実行)
+[triggers]
+crons = ["10 15 * * *"]

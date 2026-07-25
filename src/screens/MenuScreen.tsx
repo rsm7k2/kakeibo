@@ -4,9 +4,19 @@ import { useAppData } from '../contexts/AppDataContext'
 import { CATEGORY_ICON_PRESETS } from '../constants/categoryPresets'
 import MasterListEditor from '../components/MasterListEditor'
 import type { MasterListFormData } from '../components/MasterListEditor'
+import FixedCostManager from '../components/FixedCostManager'
+import CsvImportExport from '../components/CsvImportExport'
 import type { TransactionType } from '../types'
 
-type MenuTab = 'scopes' | 'categories' | 'paymentMethods'
+type MenuTab = 'scopes' | 'categories' | 'paymentMethods' | 'fixedCosts' | 'csv'
+
+const TABS: { key: MenuTab; label: string }[] = [
+  { key: 'scopes', label: '範囲' },
+  { key: 'categories', label: 'カテゴリ' },
+  { key: 'paymentMethods', label: '支払い方法' },
+  { key: 'fixedCosts', label: '固定費' },
+  { key: 'csv', label: 'CSV' }
+]
 
 export default function MenuScreen() {
   const {
@@ -27,32 +37,19 @@ export default function MenuScreen() {
     <div className="p-4 pb-24">
       <h1 className="text-lg font-bold mb-3">メニュー</h1>
 
-      {/* 管理対象の切替 */}
-      <div className="flex rounded-lg overflow-hidden border mb-4">
-        <button
-          className={`flex-1 py-2 text-sm font-bold ${
-            tab === 'scopes' ? 'bg-gray-800 text-white' : 'bg-white text-gray-500'
-          }`}
-          onClick={() => setTab('scopes')}
-        >
-          範囲
-        </button>
-        <button
-          className={`flex-1 py-2 text-sm font-bold ${
-            tab === 'categories' ? 'bg-gray-800 text-white' : 'bg-white text-gray-500'
-          }`}
-          onClick={() => setTab('categories')}
-        >
-          カテゴリ
-        </button>
-        <button
-          className={`flex-1 py-2 text-sm font-bold ${
-            tab === 'paymentMethods' ? 'bg-gray-800 text-white' : 'bg-white text-gray-500'
-          }`}
-          onClick={() => setTab('paymentMethods')}
-        >
-          支払い方法
-        </button>
+      {/* 管理対象の切替(5つに増えたため横スクロール可能なピル型タブにする) */}
+      <div className="flex gap-2 overflow-x-auto mb-4 pb-1">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${
+              tab === t.key ? 'bg-gray-800 text-white' : 'bg-white border text-gray-500'
+            }`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {tab === 'scopes' && (
@@ -155,6 +152,10 @@ export default function MenuScreen() {
           }}
         />
       )}
+
+      {tab === 'fixedCosts' && <FixedCostManager />}
+
+      {tab === 'csv' && <CsvImportExport />}
     </div>
   )
 }

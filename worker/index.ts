@@ -1,3 +1,5 @@
+import { generateDueOccurrences, previewUpcomingDates } from './fixedCost'
+
 export interface Env {
   DB: D1Database
   ASSETS: Fetcher
@@ -14,6 +16,11 @@ export default {
 
     // それ以外は静的アセット(ビルド済みReactアプリ)を返す
     return env.ASSETS.fetch(request)
+  },
+
+  // 固定費ルールの日次自動生成(Cloudflare Cron Trigger, wrangler.tomlの[triggers]参照)
+  async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
+    await generateDueOccurrences(env)
   }
 }
 
@@ -274,28 +281,42 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return Response.json({ id })
   }
 
-  // GET /api/transactions?start=YYYY-MM-DD&end=YYYY-MM-DD 期間内の一覧取得(カテゴリ等の表示名を結合)
+  // GET /api/transactions?start=YYYY-MM-DD&end=YYYY-MM-DD&scope_id=N(任意) 期間内の一覧取得(カテゴリ等の表示名を結合)
   if (url.pathname === '/api/transactions' && request.method === 'GET') {
     const start = url.searchParams.get('start')
     const end = url.searchParams.get('end')
+    const scopeId = url.searchParams.get('scope_id')
     if (!start || !end) {
       return Response.json({ errors: ['start, end は必須です'] }, { status: 400 })
     }
-    const { results } = await env.DB.prepare(
-      `SELECT
-        t.*,
-        c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
-        s.name AS scope_name,
-        p.name AS payment_method_name
-       FROM transactions t
-       JOIN categories c ON c.id = t.category_id
-       JOIN scopes s ON s.id = t.scope_id
-       LEFT JOIN payment_methods p ON p.id = t.payment_method_id
-       WHERE t.transaction_date BETWEEN ? AND ?
-       ORDER BY t.transaction_date ASC, t.id ASC`
-    )
-      .bind(start, end)
-      .all()
+    const stmt = scopeId
+      ? env.DB.prepare(
+          `SELECT
+            t.*,
+            c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
+            s.name AS scope_name,
+            p.name AS payment_method_name
+           FROM transactions t
+           JOIN categories c ON c.id = t.category_id
+           JOIN scopes s ON s.id = t.scope_id
+           LEFT JOIN payment_methods p ON p.id = t.payment_method_id
+           WHERE t.transaction_date BETWEEN ? AND ? AND t.scope_id = ?
+           ORDER BY t.transaction_date ASC, t.id ASC`
+        ).bind(start, end, Number(scopeId))
+      : env.DB.prepare(
+          `SELECT
+            t.*,
+            c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
+            s.name AS scope_name,
+            p.name AS payment_method_name
+           FROM transactions t
+           JOIN categories c ON c.id = t.category_id
+           JOIN scopes s ON s.id = t.scope_id
+           LEFT JOIN payment_methods p ON p.id = t.payment_method_id
+           WHERE t.transaction_date BETWEEN ? AND ?
+           ORDER BY t.transaction_date ASC, t.id ASC`
+        ).bind(start, end)
+    const { results } = await stmt.all()
     return Response.json(results)
   }
 
@@ -311,6 +332,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       payment_method_id: number | null
       transaction_date: string
       memo: string | null
+      is_fixed_cost?: boolean
     }>()
 
     const errors: string[] = []
@@ -332,7 +354,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     await env.DB.prepare(
       `UPDATE transactions SET
         type = ?, amount = ?, category_id = ?, scope_id = ?,
-        payment_method_id = ?, transaction_date = ?, memo = ?,
+        payment_method_id = ?, transaction_date = ?, memo = ?, is_fixed_cost = ?,
         updated_at = datetime('now')
        WHERE id = ?`
     )
@@ -344,6 +366,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         body.payment_method_id ?? null,
         body.transaction_date,
         body.memo ?? null,
+        body.is_fixed_cost ? 1 : 0,
         id
       )
       .run()
@@ -368,6 +391,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       payment_method_id: number | null
       transaction_date: string
       memo: string | null
+      is_fixed_cost?: boolean
     }>()
 
     // サーバー側バリデーション(必須項目・値の妥当性チェック)
@@ -389,8 +413,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
     const result = await env.DB.prepare(
       `INSERT INTO transactions
-        (type, amount, category_id, scope_id, payment_method_id, transaction_date, memo)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+        (type, amount, category_id, scope_id, payment_method_id, transaction_date, memo, is_fixed_cost)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(
         body.type,
@@ -399,11 +423,59 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         body.scope_id,
         body.payment_method_id ?? null,
         body.transaction_date,
-        body.memo ?? null
+        body.memo ?? null,
+        body.is_fixed_cost ? 1 : 0
       )
       .run()
 
     return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
+  // POST /api/transactions/bulk CSV取込み確定時の一括登録
+  // (カテゴリ名→id・範囲名→id の解決はフロント側のプレビュー時に完了させ、
+  //  ここでは category_id・scope_id が解決済みの行を受け取るだけにする)
+  if (url.pathname === '/api/transactions/bulk' && request.method === 'POST') {
+    const body = await request.json<{
+      rows: Array<{
+        type: string
+        amount: number
+        category_id: number
+        scope_id: number
+        transaction_date: string
+        memo: string | null
+        is_fixed_cost?: boolean
+      }>
+    }>()
+
+    if (!Array.isArray(body.rows) || body.rows.length === 0) {
+      return Response.json({ errors: ['rows は1件以上指定してください'] }, { status: 400 })
+    }
+
+    const BATCH_SIZE = 100
+    let inserted = 0
+    for (let i = 0; i < body.rows.length; i += BATCH_SIZE) {
+      const chunk = body.rows.slice(i, i + BATCH_SIZE)
+      await env.DB.batch(
+        chunk.map((row) =>
+          env.DB.prepare(
+            `INSERT INTO transactions
+              (type, amount, category_id, scope_id, payment_method_id, transaction_date, memo, is_fixed_cost)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`
+          ).bind(
+            row.type,
+            row.amount,
+            row.category_id,
+            row.scope_id,
+            row.transaction_date,
+            row.memo ?? null,
+            row.is_fixed_cost ? 1 : 0
+          )
+        )
+      )
+      inserted += chunk.length
+    }
+
+    return Response.json({ inserted }, { status: 201 })
   }
 
   // GET /api/budgets?year_month=YYYY-MM&scope_id=N 指定した月・範囲の予算一覧
@@ -480,6 +552,159 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       .run()
 
     return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
+  // GET /api/fixed_cost_rules 一覧取得(カテゴリ・範囲の表示名を結合)
+  if (url.pathname === '/api/fixed_cost_rules' && request.method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT
+        r.*,
+        c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
+        s.name AS scope_name
+       FROM fixed_cost_rules r
+       JOIN categories c ON c.id = r.category_id
+       JOIN scopes s ON s.id = r.scope_id
+       ORDER BY r.id DESC`
+    ).all()
+    return Response.json(results)
+  }
+
+  type FixedCostRuleBody = {
+    title: string
+    type: string
+    amount: number
+    category_id: number
+    scope_id: number
+    recurrence_unit: string
+    recurrence_interval: number
+    start_date: string
+    end_date: string | null
+    holiday_adjustment: string
+  }
+
+  const RECURRENCE_UNITS = ['none', 'day', 'weekday', 'week', 'month', 'year']
+  const HOLIDAY_ADJUSTMENTS = ['none', 'before', 'after']
+
+  function validateFixedCostRuleBody(body: FixedCostRuleBody): string[] {
+    const errors: string[] = []
+    if (!body.title || body.title.trim() === '') errors.push('タイトルは必須です')
+    if (body.type !== 'income' && body.type !== 'expense') {
+      errors.push('type は income または expense を指定してください')
+    }
+    if (typeof body.amount !== 'number' || !(body.amount > 0)) {
+      errors.push('amount は0より大きい数値を指定してください')
+    }
+    if (!body.category_id) errors.push('category_id は必須です')
+    if (!body.scope_id) errors.push('scope_id は必須です')
+    if (!RECURRENCE_UNITS.includes(body.recurrence_unit)) {
+      errors.push('recurrence_unit の指定が不正です')
+    }
+    if (!Number.isInteger(body.recurrence_interval) || body.recurrence_interval < 1) {
+      errors.push('recurrence_interval は1以上の整数を指定してください')
+    }
+    if (!body.start_date || !/^\d{4}-\d{2}-\d{2}$/.test(body.start_date)) {
+      errors.push('start_date は YYYY-MM-DD 形式で指定してください')
+    }
+    if (body.end_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.end_date)) {
+      errors.push('end_date は YYYY-MM-DD 形式で指定してください')
+    }
+    if (body.end_date && body.start_date && body.end_date < body.start_date) {
+      errors.push('end_date は start_date 以降の日付を指定してください')
+    }
+    if (!HOLIDAY_ADJUSTMENTS.includes(body.holiday_adjustment)) {
+      errors.push('holiday_adjustment の指定が不正です')
+    }
+    return errors
+  }
+
+  // POST /api/fixed_cost_rules 新規作成。作成直後に発生済み分(過去日開始ならバックフィル分含む)を即時生成する
+  if (url.pathname === '/api/fixed_cost_rules' && request.method === 'POST') {
+    const body = await request.json<FixedCostRuleBody>()
+    const errors = validateFixedCostRuleBody(body)
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
+    const result = await env.DB.prepare(
+      `INSERT INTO fixed_cost_rules
+        (title, type, amount, category_id, scope_id, recurrence_unit, recurrence_interval, start_date, end_date, holiday_adjustment)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        body.title.trim(),
+        body.type,
+        body.amount,
+        body.category_id,
+        body.scope_id,
+        body.recurrence_unit,
+        body.recurrence_interval,
+        body.start_date,
+        body.end_date ?? null,
+        body.holiday_adjustment
+      )
+      .run()
+
+    const id = Number(result.meta.last_row_id)
+    await generateDueOccurrences(env, id)
+    return Response.json({ id }, { status: 201 })
+  }
+
+  // POST /api/fixed_cost_rules/preview 保存前のルール(下書き)から次回以降の発生日をプレビュー
+  if (url.pathname === '/api/fixed_cost_rules/preview' && request.method === 'POST') {
+    const body = await request.json<FixedCostRuleBody & { occurrence_count?: number }>()
+    const errors = validateFixedCostRuleBody(body)
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+    const dates = previewUpcomingDates(body, body.occurrence_count ?? 0, 5)
+    return Response.json({ dates })
+  }
+
+  // PUT /api/fixed_cost_rules/:id 編集(以降の発生分のみ新内容を反映。過去生成済みのtransactionsは変更しない)
+  const fixedCostRuleIdMatch = url.pathname.match(/^\/api\/fixed_cost_rules\/(\d+)$/)
+  if (fixedCostRuleIdMatch && request.method === 'PUT') {
+    const id = Number(fixedCostRuleIdMatch[1])
+    const body = await request.json<FixedCostRuleBody>()
+    const errors = validateFixedCostRuleBody(body)
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
+    await env.DB.prepare(
+      `UPDATE fixed_cost_rules SET
+        title = ?, type = ?, amount = ?, category_id = ?, scope_id = ?,
+        recurrence_unit = ?, recurrence_interval = ?, start_date = ?, end_date = ?, holiday_adjustment = ?,
+        updated_at = datetime('now')
+       WHERE id = ?`
+    )
+      .bind(
+        body.title.trim(),
+        body.type,
+        body.amount,
+        body.category_id,
+        body.scope_id,
+        body.recurrence_unit,
+        body.recurrence_interval,
+        body.start_date,
+        body.end_date ?? null,
+        body.holiday_adjustment,
+        id
+      )
+      .run()
+
+    await generateDueOccurrences(env, id)
+    return Response.json({ id })
+  }
+
+  // DELETE /api/fixed_cost_rules/:id 削除(過去に生成済みのtransactionsは残したまま、以降の自動生成のみ停止する)
+  // D1は外部キー制約を強制するため、削除前にtransactions側の参照(fixed_cost_rule_id)を外しておく
+  if (fixedCostRuleIdMatch && request.method === 'DELETE') {
+    const id = Number(fixedCostRuleIdMatch[1])
+    await env.DB.batch([
+      env.DB.prepare('UPDATE transactions SET fixed_cost_rule_id = NULL WHERE fixed_cost_rule_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM fixed_cost_rules WHERE id = ?').bind(id)
+    ])
+    return Response.json({ id })
   }
 
   return new Response('Not Found', { status: 404 })

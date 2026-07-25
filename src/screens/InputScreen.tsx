@@ -268,8 +268,11 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
 
       {/* 計算機オーバーレイ */}
       {showCalculator && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40">
-          <div className="w-full bg-white rounded-t-2xl p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/40"
+          onClick={() => setShowCalculator(false)}
+        >
+          <div className="w-full bg-white rounded-t-2xl p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-bold text-sm">金額を入力</h2>
               <button

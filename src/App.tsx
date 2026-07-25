@@ -20,13 +20,19 @@ function AppContent() {
     setActiveTab('input')
   }
 
+  // 編集の保存・削除・キャンセルが完了したら、編集の呼び出し元(カレンダー画面)に戻る
+  const handleEditDone = () => {
+    setEditingTransaction(null)
+    setActiveTab('calendar')
+  }
+
   // 画面はアンマウントせず、CSSの表示/非表示切り替えで保持する。
   // これにより、タブを切り替えるたびにカテゴリ・範囲・支払い方法・収支データを
   // 再取得する必要がなくなり、2回目以降の切り替えがほぼ瞬時になる。
   return (
     <div className="min-h-screen pb-16">
       <div className={activeTab === 'input' ? '' : 'hidden'}>
-        <InputScreen editTransaction={editingTransaction} onEditDone={() => setEditingTransaction(null)} />
+        <InputScreen editTransaction={editingTransaction} onEditDone={handleEditDone} />
       </div>
       <div className={activeTab === 'calendar' ? '' : 'hidden'}>
         <CalendarScreen onEditTransaction={handleEditTransaction} />

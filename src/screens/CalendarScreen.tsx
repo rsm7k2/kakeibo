@@ -19,6 +19,19 @@ function yen(n: number): string {
   return n.toLocaleString('ja-JP')
 }
 
+// 範囲(個人/世帯など)のバッジ配色。scope_id に応じて一覧から順番に割り当てる
+const SCOPE_BADGE_CLASSES = [
+  'bg-blue-50 text-blue-500',
+  'bg-purple-50 text-purple-500',
+  'bg-teal-50 text-teal-600',
+  'bg-orange-50 text-orange-500',
+  'bg-pink-50 text-pink-500'
+]
+
+function scopeBadgeClass(scopeId: number): string {
+  return SCOPE_BADGE_CLASSES[(scopeId - 1 + SCOPE_BADGE_CLASSES.length) % SCOPE_BADGE_CLASSES.length]
+}
+
 interface Props {
   onEditTransaction: (t: TransactionWithDetails) => void
 }
@@ -243,11 +256,27 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                         {t.category_icon ?? '•'}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-bold truncate">{t.category_name}</div>
-                        <div className="text-[10px] text-gray-400 truncate">
-                          {t.scope_name}
-                          {t.payment_method_name ? ` ・ ${t.payment_method_name}` : ''}
-                          {t.memo ? ` ・ ${t.memo}` : ''}
+                        <div className="text-sm font-bold truncate">
+                          {t.category_name}
+                          {t.memo && (
+                            <span className="text-[10px] text-gray-400 font-normal">
+                              (
+                              {t.memo}
+                              )
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full ${scopeBadgeClass(t.scope_id)}`}
+                          >
+                            {t.scope_name}
+                          </span>
+                          {t.payment_method_name && (
+                            <span className="text-[10px] text-gray-400 truncate">
+                              {t.payment_method_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="text-sm font-bold text-red-500 shrink-0">-¥{yen(t.amount)}</div>

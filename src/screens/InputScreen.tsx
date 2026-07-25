@@ -26,6 +26,37 @@ export default function InputScreen() {
   const [error, setError] = useState<string | null>(null)
   const [savedMessage, setSavedMessage] = useState(false)
 
+  // カテゴリのクイック追加用
+  const [showAddCategory, setShowAddCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryIcon, setNewCategoryIcon] = useState('')
+  const [newCategoryColor, setNewCategoryColor] = useState('#4CAF50')
+  const [addingCategory, setAddingCategory] = useState(false)
+
+  const COLOR_PRESETS = [
+    '#4CAF50', '#FF7043', '#42A5F5', '#AB47BC',
+    '#FFCA28', '#8D6E63', '#26A69A', '#EC407A'
+  ]
+
+  // 家計簿カテゴリでよく使う絵文字の候補(タップで選択)
+  const ICON_PRESETS = [
+    '🍚', '☕', '🍺', '🚃', '🚗', '✈️', '🏠', '💡',
+    '🧻', '👕', '💊', '🏥', '📚', '🎮', '🎁', '🐶',
+    '📱', '💰', '💳', '🛒', '💇', '⚽', '🎵', '🔧'
+  ]
+
+  const reloadCategories = async (selectId?: number) => {
+    const data = await api.get<Category[]>(`/categories?type=${type}`)
+    setCategories(data)
+    if (selectId) {
+      setCategoryId(selectId)
+    } else if (data.length > 0) {
+      setCategoryId(data[0].id)
+    } else {
+      setCategoryId(null)
+    }
+  }
+
   // 範囲・支払い方法は type に依存しないため初回のみ取得
   useEffect(() => {
     api.get<Scope[]>('/scopes').then((data) => {
@@ -37,11 +68,36 @@ export default function InputScreen() {
 
   // カテゴリは収入/支出の切り替えに応じて再取得し、選択状態をリセットする
   useEffect(() => {
-    api.get<Category[]>(`/categories?type=${type}`).then((data) => {
-      setCategories(data)
-      setCategoryId(data.length > 0 ? data[0].id : null)
-    })
+    reloadCategories()
+    setShowAddCategory(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type])
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      setError('カテゴリ名を入力してください')
+      return
+    }
+    setAddingCategory(true)
+    setError(null)
+    try {
+      const res = await api.post<{ id: number }>('/categories', {
+        name: newCategoryName.trim(),
+        type,
+        icon: newCategoryIcon || null,
+        color: newCategoryColor
+      })
+      await reloadCategories(res.id)
+      setNewCategoryName('')
+      setNewCategoryIcon('')
+      setNewCategoryColor('#4CAF50')
+      setShowAddCategory(false)
+    } catch {
+      setError('カテゴリの追加に失敗しました')
+    } finally {
+      setAddingCategory(false)
+    }
+  }
 
   const resetForm = () => {
     setAmount('')
@@ -113,6 +169,17 @@ export default function InputScreen() {
         </button>
       </div>
 
+      {/* 日付 */}
+      <div>
+        <label className="text-xs text-gray-500">日付</label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full border rounded-lg px-3 py-2"
+        />
+      </div>
+
       {/* 金額 */}
       <div>
         <label className="text-xs text-gray-500">金額</label>
@@ -127,17 +194,6 @@ export default function InputScreen() {
             className="w-full text-2xl outline-none"
           />
         </div>
-      </div>
-
-      {/* 日付 */}
-      <div>
-        <label className="text-xs text-gray-500">日付</label>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2"
-        />
       </div>
 
       {/* カテゴリ(アイコン+色付きグリッド選択) */}
@@ -162,7 +218,90 @@ export default function InputScreen() {
               <span className="text-[10px] mt-1 text-gray-700">{c.name}</span>
             </button>
           ))}
+
+          {/* カテゴリのクイック追加タイル */}
+          <button
+            onClick={() => setShowAddCategory((v) => !v)}
+            className="flex flex-col items-center py-2 rounded-lg border-2 border-dashed border-gray-300"
+          >
+            <span className="w-8 h-8 flex items-center justify-center rounded-full text-lg bg-gray-100 text-gray-400">
+              ＋
+            </span>
+            <span className="text-[10px] mt-1 text-gray-500">追加</span>
+          </button>
         </div>
+
+        {/* カテゴリ追加フォーム */}
+        {showAddCategory && (
+          <div className="mt-3 p-3 border rounded-lg bg-gray-50 space-y-2">
+            <div>
+              <label className="text-xs text-gray-500">カテゴリ名</label>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="例: 医療費"
+                className="w-full border rounded-lg px-3 py-2 mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">アイコン</label>
+              <div className="grid grid-cols-8 gap-1 mt-1">
+                {ICON_PRESETS.map((icon) => (
+                  <button
+                    key={icon}
+                    onClick={() => setNewCategoryIcon(icon)}
+                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-lg border-2 ${
+                      newCategoryIcon === icon ? 'border-gray-800 bg-gray-100' : 'border-transparent'
+                    }`}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+              <label className="text-xs text-gray-500 block mt-2">
+                候補にない場合(端末の絵文字キーボードから自由入力)
+              </label>
+              <input
+                type="text"
+                value={newCategoryIcon}
+                onChange={(e) => setNewCategoryIcon(e.target.value)}
+                placeholder="任意の絵文字"
+                className="w-20 border rounded-lg px-3 py-2 mt-1 text-center text-lg"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">色(円グラフの色にもなります)</label>
+              <div className="flex gap-2 mt-1">
+                {COLOR_PRESETS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setNewCategoryColor(c)}
+                    className={`w-7 h-7 rounded-full border-2 ${
+                      newCategoryColor === c ? 'border-gray-800' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleAddCategory}
+                disabled={addingCategory}
+                className="flex-1 bg-gray-800 text-white text-sm font-bold py-2 rounded-lg disabled:opacity-50"
+              >
+                {addingCategory ? '追加中...' : 'このカテゴリを追加'}
+              </button>
+              <button
+                onClick={() => setShowAddCategory(false)}
+                className="px-4 text-sm text-gray-500"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 範囲(個人/世帯) */}

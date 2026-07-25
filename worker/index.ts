@@ -44,6 +44,42 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return Response.json(results)
   }
 
+  // POST /api/categories 新規追加(入力画面からのクイック追加、メニュー画面の管理どちらからも利用)
+  if (url.pathname === '/api/categories' && request.method === 'POST') {
+    const body = await request.json<{
+      name: string
+      type: string
+      icon: string | null
+      color: string
+    }>()
+
+    const errors: string[] = []
+    if (!body.name || body.name.trim() === '') errors.push('name は必須です')
+    if (body.type !== 'income' && body.type !== 'expense') {
+      errors.push('type は income または expense を指定してください')
+    }
+    if (!body.color) errors.push('color は必須です')
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
+    // 既存の最大sort_orderの次に追加(同じtype内で末尾に配置)
+    const maxRow = await env.DB.prepare(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM categories WHERE type = ?'
+    )
+      .bind(body.type)
+      .first<{ max_order: number }>()
+
+    const result = await env.DB.prepare(
+      `INSERT INTO categories (name, type, icon, color, sort_order, is_default)
+       VALUES (?, ?, ?, ?, ?, 0)`
+    )
+      .bind(body.name.trim(), body.type, body.icon ?? null, body.color, (maxRow?.max_order ?? 0) + 1)
+      .run()
+
+    return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
   // POST /api/transactions 新規登録
   if (url.pathname === '/api/transactions' && request.method === 'POST') {
     const body = await request.json<{

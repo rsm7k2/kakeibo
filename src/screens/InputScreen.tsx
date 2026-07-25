@@ -12,7 +12,7 @@ interface Props {
 export default function InputScreen({ editTransaction = null, onEditDone }: Props) {
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState(0)
-  const [calcKey, setCalcKey] = useState(0) // 計算機の内部状態をリセットするための再マウント用キー
+  const [showCalculator, setShowCalculator] = useState(false)
   const [date, setDate] = useState(todayJst())
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [scopeId, setScopeId] = useState<number | null>(null)
@@ -90,7 +90,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     if (editTransaction) {
       setType(editTransaction.type)
       setAmount(editTransaction.amount)
-      setCalcKey((k) => k + 1)
       setDate(editTransaction.transaction_date)
       setCategoryId(editTransaction.category_id)
       setScopeId(editTransaction.scope_id)
@@ -128,7 +127,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
 
   const resetForm = () => {
     setAmount(0)
-    setCalcKey((k) => k + 1)
     setDate(todayJst())
     setMemo('')
     setPaymentMethodId(null)
@@ -243,17 +241,39 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         />
       </div>
 
-      {/* 金額(四則演算対応の計算機入力) */}
+      {/* 金額(タップで計算機オーバーレイを表示) */}
       <div>
         <label className="text-xs text-gray-500">金額</label>
-        <div className="mt-1">
-          <CalculatorInput
-            key={calcKey}
-            initialValue={editingId ? amount : undefined}
-            onChange={setAmount}
-          />
-        </div>
+        <button
+          onClick={() => setShowCalculator(true)}
+          className="w-full flex items-center border rounded-lg px-3 py-2 mt-1"
+          type="button"
+        >
+          <span className="text-gray-400 mr-1">¥</span>
+          <span className="text-2xl font-bold">{amount.toLocaleString('ja-JP')}</span>
+        </button>
       </div>
+
+      {/* 計算機オーバーレイ */}
+      {showCalculator && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40">
+          <div className="w-full bg-white rounded-t-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-bold text-sm">金額を入力</h2>
+              <button
+                onClick={() => setShowCalculator(false)}
+                className="bg-green-600 text-white text-sm font-bold px-4 py-1.5 rounded-lg"
+              >
+                確定
+              </button>
+            </div>
+            <CalculatorInput
+              initialValue={amount > 0 ? amount : undefined}
+              onChange={setAmount}
+            />
+          </div>
+        </div>
+      )}
 
       {/* カテゴリ(アイコン+色付きグリッド選択) */}
       <div>

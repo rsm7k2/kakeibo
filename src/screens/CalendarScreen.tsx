@@ -139,99 +139,100 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
   }
 
   return (
-    <div className="p-4 pb-24">
-      {/* 月切替 */}
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={goToPrevMonth} className="px-3 py-1 text-gray-500">
-          ＜
-        </button>
-        <h1 className="text-lg font-bold">
-          {year}年{month0 + 1}月
-        </h1>
-        <button onClick={goToNextMonth} className="px-3 py-1 text-gray-500">
-          ＞
-        </button>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* 上部(月切替・範囲フィルタ・サマリー・カレンダー本体)は固定表示 */}
+      <div className="p-4 pb-2 shrink-0">
+        {/* 月切替 */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={goToPrevMonth} className="px-3 py-1 text-gray-500">
+            ＜
+          </button>
+          <h1 className="text-lg font-bold">
+            {year}年{month0 + 1}月
+          </h1>
+          <button onClick={goToNextMonth} className="px-3 py-1 text-gray-500">
+            ＞
+          </button>
+        </div>
 
-      {/* 範囲切替タブ */}
-      <div className="flex gap-2 mb-3">
-        <button
-          onClick={() => setScopeFilter('all')}
-          className={`flex-1 py-2 rounded-lg text-sm border ${
-            scopeFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
-          }`}
-        >
-          全て
-        </button>
-        {scopes.map((s) => (
+        {/* 範囲切替タブ */}
+        <div className="flex gap-2 mb-3">
           <button
-            key={s.id}
-            onClick={() => setScopeFilter(s.id)}
+            onClick={() => setScopeFilter('all')}
             className={`flex-1 py-2 rounded-lg text-sm border ${
-              scopeFilter === s.id ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
+              scopeFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
             }`}
           >
-            {s.name}
+            全て
           </button>
-        ))}
-      </div>
-
-      {/* 月間サマリー(範囲フィルタ反映) */}
-      <div className="flex justify-around text-sm mb-4 border rounded-lg py-2">
-        <div className="text-center">
-          <div className="text-gray-400 text-xs">収入</div>
-          <div className="text-green-600 font-bold">¥{yen(monthIncomeTotal)}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-gray-400 text-xs">支出</div>
-          <div className="text-red-500 font-bold">¥{yen(monthExpenseTotal)}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-gray-400 text-xs">収支</div>
-          <div className="font-bold">¥{yen(monthIncomeTotal - monthExpenseTotal)}</div>
-        </div>
-      </div>
-
-      {loading && <LoadingOverlay text="更新中" />}
-
-      {/* 曜日ヘッダー */}
-      <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
-        {WEEKDAY_LABELS.map((w) => (
-          <div key={w}>{w}</div>
-        ))}
-      </div>
-
-      {/* カレンダーグリッド(タップでその日の支出一覧までスクロール) */}
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((day, i) => {
-          if (day === null) return <div key={`pad-${i}`} />
-          const ymd = formatYmd(year, month0, day)
-          const entry = byDate.get(ymd)
-          return (
+          {scopes.map((s) => (
             <button
-              key={ymd}
-              type="button"
-              onClick={() => scrollToDate(ymd)}
-              className="aspect-square border border-gray-200 rounded-lg p-1 text-left active:bg-gray-100"
+              key={s.id}
+              onClick={() => setScopeFilter(s.id)}
+              className={`flex-1 py-2 rounded-lg text-sm border ${
+                scopeFilter === s.id ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
+              }`}
             >
-              <div className="text-xs">{day}</div>
-              {entry && entry.expense > 0 && (
-                <div className="text-[9px] text-red-500 leading-tight truncate">
-                  -{yen(entry.expense)}
-                </div>
-              )}
-              {entry && entry.income > 0 && (
-                <div className="text-[9px] text-green-600 leading-tight truncate">
-                  +{yen(entry.income)}
-                </div>
-              )}
+              {s.name}
             </button>
-          )
-        })}
+          ))}
+        </div>
+
+        {/* 月間サマリー(範囲フィルタ反映) */}
+        <div className="flex justify-around text-sm mb-4 border rounded-lg py-2">
+          <div className="text-center">
+            <div className="text-gray-400 text-xs">収入</div>
+            <div className="text-green-600 font-bold">¥{yen(monthIncomeTotal)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-400 text-xs">支出</div>
+            <div className="text-red-500 font-bold">¥{yen(monthExpenseTotal)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-400 text-xs">収支</div>
+            <div className="font-bold">¥{yen(monthIncomeTotal - monthExpenseTotal)}</div>
+          </div>
+        </div>
+
+        {/* 曜日ヘッダー */}
+        <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
+          {WEEKDAY_LABELS.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </div>
+
+        {/* カレンダーグリッド(タップでその日の支出一覧までスクロール) */}
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((day, i) => {
+            if (day === null) return <div key={`pad-${i}`} />
+            const ymd = formatYmd(year, month0, day)
+            const entry = byDate.get(ymd)
+            return (
+              <button
+                key={ymd}
+                type="button"
+                onClick={() => scrollToDate(ymd)}
+                className="aspect-square border border-gray-200 rounded-lg p-1 text-left active:bg-gray-100"
+              >
+                <div className="text-xs">{day}</div>
+                {entry && entry.expense > 0 && (
+                  <div className="text-[9px] text-red-500 leading-tight truncate">
+                    -{yen(entry.expense)}
+                  </div>
+                )}
+                {entry && entry.income > 0 && (
+                  <div className="text-[9px] text-green-600 leading-tight truncate">
+                    +{yen(entry.income)}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* 当月の支出一覧(日付降順) */}
-      <div className="mt-4">
+      {/* 当月の支出一覧(日付降順)。ここだけがスクロール対象 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-8">
         <h2 className="text-sm font-bold text-gray-600 mb-2">
           {month0 + 1}月の支出一覧
           {scopeFilter !== 'all' && (
@@ -302,6 +303,8 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
           ))}
         </div>
       </div>
+
+      {loading && <LoadingOverlay text="更新中" />}
     </div>
   )
 }

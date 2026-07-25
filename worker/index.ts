@@ -212,6 +212,81 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return Response.json({ id: result.meta.last_row_id }, { status: 201 })
   }
 
-  // 各エンドポイント(budgets, レポート集計等)は該当画面の実装時に順次追加してください
+  // GET /api/budgets?year_month=YYYY-MM&scope_id=N 指定した月・範囲の予算一覧
+  // (category_id が NULL の行 = その範囲全体の予算)
+  if (url.pathname === '/api/budgets' && request.method === 'GET') {
+    const yearMonth = url.searchParams.get('year_month')
+    const scopeId = url.searchParams.get('scope_id')
+    if (!yearMonth || !scopeId) {
+      return Response.json({ errors: ['year_month, scope_id は必須です'] }, { status: 400 })
+    }
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM budgets WHERE year_month = ? AND scope_id = ?'
+    )
+      .bind(yearMonth, Number(scopeId))
+      .all()
+    return Response.json(results)
+  }
+
+  // PUT /api/budgets 予算の登録・更新(year_month × scope_id × category_id で1件に定まる)
+  // category_id が null の場合は「範囲全体の予算」を表す。
+  // SQLiteのUNIQUE制約はNULL同士を区別してしまうため、category_id が null のケースは
+  // ON CONFLICTではなく事前のSELECTで存在確認してから INSERT/UPDATE を出し分ける。
+  if (url.pathname === '/api/budgets' && request.method === 'PUT') {
+    const body = await request.json<{
+      year_month: string
+      scope_id: number
+      category_id: number | null
+      amount: number
+    }>()
+
+    const errors: string[] = []
+    if (!body.year_month || !/^\d{4}-\d{2}$/.test(body.year_month)) {
+      errors.push('year_month は YYYY-MM 形式で指定してください')
+    }
+    if (!body.scope_id) errors.push('scope_id は必須です')
+    if (typeof body.amount !== 'number' || body.amount < 0) {
+      errors.push('amount は0以上の数値を指定してください')
+    }
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
+    if (body.category_id === null) {
+      const existing = await env.DB.prepare(
+        'SELECT id FROM budgets WHERE year_month = ? AND scope_id = ? AND category_id IS NULL'
+      )
+        .bind(body.year_month, body.scope_id)
+        .first<{ id: number }>()
+
+      if (existing) {
+        await env.DB.prepare(
+          `UPDATE budgets SET amount = ?, updated_at = datetime('now') WHERE id = ?`
+        )
+          .bind(body.amount, existing.id)
+          .run()
+        return Response.json({ id: existing.id })
+      }
+
+      const result = await env.DB.prepare(
+        `INSERT INTO budgets (year_month, scope_id, category_id, amount) VALUES (?, ?, NULL, ?)`
+      )
+        .bind(body.year_month, body.scope_id, body.amount)
+        .run()
+      return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+    }
+
+    const result = await env.DB.prepare(
+      `INSERT INTO budgets (year_month, scope_id, category_id, amount)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (year_month, scope_id, category_id)
+       DO UPDATE SET amount = excluded.amount, updated_at = datetime('now')`
+    )
+      .bind(body.year_month, body.scope_id, body.category_id, body.amount)
+      .run()
+
+    return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
   return new Response('Not Found', { status: 404 })
 }

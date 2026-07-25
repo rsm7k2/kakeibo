@@ -10,6 +10,10 @@ interface AppDataContextValue {
   loadingMaster: boolean
   /** カテゴリ追加後などに呼び出して、共有中のカテゴリ一覧を再取得する */
   reloadCategories: () => Promise<void>
+  /** メニュー画面での範囲の追加・編集・削除・並び替え後に呼び出す */
+  reloadScopes: () => Promise<void>
+  /** メニュー画面での支払い方法の追加・編集・削除・並び替え後に呼び出す */
+  reloadPaymentMethods: () => Promise<void>
   /** 収支データが変更された回数。この値の変化を見て、各画面が再取得のタイミングを判断する */
   transactionsVersion: number
   /** 収支の保存・更新・削除が成功した際に呼び出す */
@@ -28,6 +32,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const reloadCategories = useCallback(async () => {
     const data = await api.get<Category[]>('/categories')
     setCategories(data)
+  }, [])
+
+  const reloadScopes = useCallback(async () => {
+    const data = await api.get<Scope[]>('/scopes')
+    setScopes(data)
+  }, [])
+
+  const reloadPaymentMethods = useCallback(async () => {
+    const data = await api.get<PaymentMethod[]>('/payment_methods')
+    setPaymentMethods(data)
   }, [])
 
   // マスタデータはアプリ起動時に1度だけ取得し、以降は各画面で使い回す
@@ -52,6 +66,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         paymentMethods,
         loadingMaster,
         reloadCategories,
+        reloadScopes,
+        reloadPaymentMethods,
         transactionsVersion,
         bumpTransactionsVersion
       }}

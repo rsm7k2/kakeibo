@@ -7,7 +7,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options
   })
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`)
+    const body = (await res.json().catch(() => null)) as { errors?: string[] } | null
+    throw new Error(body?.errors?.[0] ?? `API error: ${res.status} ${res.statusText}`)
   }
   return res.json() as Promise<T>
 }

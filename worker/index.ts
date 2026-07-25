@@ -36,12 +36,143 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return Response.json(results)
   }
 
+  // POST /api/scopes 新規追加(メニュー画面)
+  if (url.pathname === '/api/scopes' && request.method === 'POST') {
+    const body = await request.json<{ name: string }>()
+    if (!body.name || body.name.trim() === '') {
+      return Response.json({ errors: ['name は必須です'] }, { status: 400 })
+    }
+    const maxRow = await env.DB.prepare(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM scopes'
+    ).first<{ max_order: number }>()
+    const result = await env.DB.prepare(
+      'INSERT INTO scopes (name, sort_order, is_default) VALUES (?, ?, 0)'
+    )
+      .bind(body.name.trim(), (maxRow?.max_order ?? 0) + 1)
+      .run()
+    return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
+  // PUT /api/scopes/reorder 並び替え(idsの並び順どおりにsort_orderを振り直す)
+  if (url.pathname === '/api/scopes/reorder' && request.method === 'PUT') {
+    const body = await request.json<{ ids: number[] }>()
+    if (!Array.isArray(body.ids)) {
+      return Response.json({ errors: ['ids は配列で指定してください'] }, { status: 400 })
+    }
+    await env.DB.batch(
+      body.ids.map((id, i) =>
+        env.DB.prepare('UPDATE scopes SET sort_order = ? WHERE id = ?').bind(i + 1, id)
+      )
+    )
+    return Response.json({ ok: true })
+  }
+
+  // PUT /api/scopes/:id 編集
+  const scopeIdMatch = url.pathname.match(/^\/api\/scopes\/(\d+)$/)
+  if (scopeIdMatch && request.method === 'PUT') {
+    const id = Number(scopeIdMatch[1])
+    const body = await request.json<{ name: string }>()
+    if (!body.name || body.name.trim() === '') {
+      return Response.json({ errors: ['name は必須です'] }, { status: 400 })
+    }
+    await env.DB.prepare('UPDATE scopes SET name = ? WHERE id = ?')
+      .bind(body.name.trim(), id)
+      .run()
+    return Response.json({ id })
+  }
+
+  // DELETE /api/scopes/:id 削除(収支データ・予算で使用中の場合は削除不可)
+  if (scopeIdMatch && request.method === 'DELETE') {
+    const id = Number(scopeIdMatch[1])
+    const txCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM transactions WHERE scope_id = ?'
+    )
+      .bind(id)
+      .first<{ c: number }>()
+    const budgetCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM budgets WHERE scope_id = ?'
+    )
+      .bind(id)
+      .first<{ c: number }>()
+    if ((txCount?.c ?? 0) > 0 || (budgetCount?.c ?? 0) > 0) {
+      return Response.json(
+        { errors: ['この範囲は収支データまたは予算で使用中のため削除できません'] },
+        { status: 400 }
+      )
+    }
+    await env.DB.prepare('DELETE FROM scopes WHERE id = ?').bind(id).run()
+    return Response.json({ id })
+  }
+
   // GET /api/payment_methods 一覧取得
   if (url.pathname === '/api/payment_methods' && request.method === 'GET') {
     const { results } = await env.DB.prepare(
       'SELECT * FROM payment_methods ORDER BY sort_order'
     ).all()
     return Response.json(results)
+  }
+
+  // POST /api/payment_methods 新規追加(メニュー画面)
+  if (url.pathname === '/api/payment_methods' && request.method === 'POST') {
+    const body = await request.json<{ name: string; icon: string | null }>()
+    if (!body.name || body.name.trim() === '') {
+      return Response.json({ errors: ['name は必須です'] }, { status: 400 })
+    }
+    const maxRow = await env.DB.prepare(
+      'SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM payment_methods'
+    ).first<{ max_order: number }>()
+    const result = await env.DB.prepare(
+      'INSERT INTO payment_methods (name, icon, sort_order, is_default) VALUES (?, ?, ?, 0)'
+    )
+      .bind(body.name.trim(), body.icon ?? null, (maxRow?.max_order ?? 0) + 1)
+      .run()
+    return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
+  // PUT /api/payment_methods/reorder 並び替え
+  if (url.pathname === '/api/payment_methods/reorder' && request.method === 'PUT') {
+    const body = await request.json<{ ids: number[] }>()
+    if (!Array.isArray(body.ids)) {
+      return Response.json({ errors: ['ids は配列で指定してください'] }, { status: 400 })
+    }
+    await env.DB.batch(
+      body.ids.map((id, i) =>
+        env.DB.prepare('UPDATE payment_methods SET sort_order = ? WHERE id = ?').bind(i + 1, id)
+      )
+    )
+    return Response.json({ ok: true })
+  }
+
+  // PUT /api/payment_methods/:id 編集
+  const paymentMethodIdMatch = url.pathname.match(/^\/api\/payment_methods\/(\d+)$/)
+  if (paymentMethodIdMatch && request.method === 'PUT') {
+    const id = Number(paymentMethodIdMatch[1])
+    const body = await request.json<{ name: string; icon: string | null }>()
+    if (!body.name || body.name.trim() === '') {
+      return Response.json({ errors: ['name は必須です'] }, { status: 400 })
+    }
+    await env.DB.prepare('UPDATE payment_methods SET name = ?, icon = ? WHERE id = ?')
+      .bind(body.name.trim(), body.icon ?? null, id)
+      .run()
+    return Response.json({ id })
+  }
+
+  // DELETE /api/payment_methods/:id 削除(収支データで使用中の場合は削除不可)
+  if (paymentMethodIdMatch && request.method === 'DELETE') {
+    const id = Number(paymentMethodIdMatch[1])
+    const txCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM transactions WHERE payment_method_id = ?'
+    )
+      .bind(id)
+      .first<{ c: number }>()
+    if ((txCount?.c ?? 0) > 0) {
+      return Response.json(
+        { errors: ['この支払い方法は収支データで使用中のため削除できません'] },
+        { status: 400 }
+      )
+    }
+    await env.DB.prepare('DELETE FROM payment_methods WHERE id = ?').bind(id).run()
+    return Response.json({ id })
   }
 
   // POST /api/categories 新規追加(入力画面からのクイック追加、メニュー画面の管理どちらからも利用)
@@ -78,6 +209,69 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       .run()
 
     return Response.json({ id: result.meta.last_row_id }, { status: 201 })
+  }
+
+  // PUT /api/categories/reorder 並び替え(type内でidsの並び順どおりにsort_orderを振り直す)
+  if (url.pathname === '/api/categories/reorder' && request.method === 'PUT') {
+    const body = await request.json<{ type: string; ids: number[] }>()
+    if (body.type !== 'income' && body.type !== 'expense') {
+      return Response.json({ errors: ['type は income または expense を指定してください'] }, { status: 400 })
+    }
+    if (!Array.isArray(body.ids)) {
+      return Response.json({ errors: ['ids は配列で指定してください'] }, { status: 400 })
+    }
+    await env.DB.batch(
+      body.ids.map((id, i) =>
+        env.DB.prepare('UPDATE categories SET sort_order = ? WHERE id = ? AND type = ?').bind(
+          i + 1,
+          id,
+          body.type
+        )
+      )
+    )
+    return Response.json({ ok: true })
+  }
+
+  // PUT /api/categories/:id 編集(name, icon, color のみ。typeは既存の収支データとの整合性のため変更不可)
+  const categoryIdMatch = url.pathname.match(/^\/api\/categories\/(\d+)$/)
+  if (categoryIdMatch && request.method === 'PUT') {
+    const id = Number(categoryIdMatch[1])
+    const body = await request.json<{ name: string; icon: string | null; color: string }>()
+
+    const errors: string[] = []
+    if (!body.name || body.name.trim() === '') errors.push('name は必須です')
+    if (!body.color) errors.push('color は必須です')
+    if (errors.length > 0) {
+      return Response.json({ errors }, { status: 400 })
+    }
+
+    await env.DB.prepare('UPDATE categories SET name = ?, icon = ?, color = ? WHERE id = ?')
+      .bind(body.name.trim(), body.icon ?? null, body.color, id)
+      .run()
+    return Response.json({ id })
+  }
+
+  // DELETE /api/categories/:id 削除(収支データ・予算で使用中の場合は削除不可)
+  if (categoryIdMatch && request.method === 'DELETE') {
+    const id = Number(categoryIdMatch[1])
+    const txCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM transactions WHERE category_id = ?'
+    )
+      .bind(id)
+      .first<{ c: number }>()
+    const budgetCount = await env.DB.prepare(
+      'SELECT COUNT(*) AS c FROM budgets WHERE category_id = ?'
+    )
+      .bind(id)
+      .first<{ c: number }>()
+    if ((txCount?.c ?? 0) > 0 || (budgetCount?.c ?? 0) > 0) {
+      return Response.json(
+        { errors: ['このカテゴリは収支データまたは予算で使用中のため削除できません'] },
+        { status: 400 }
+      )
+    }
+    await env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id).run()
+    return Response.json({ id })
   }
 
   // GET /api/transactions?start=YYYY-MM-DD&end=YYYY-MM-DD 期間内の一覧取得(カテゴリ等の表示名を結合)

@@ -4,6 +4,7 @@ import { todayJst } from '../utils/date'
 import CalculatorInput from '../components/CalculatorInput'
 import LoadingOverlay from '../components/LoadingOverlay'
 import { useAppData } from '../contexts/AppDataContext'
+import { CATEGORY_COLOR_PRESETS, CATEGORY_ICON_PRESETS } from '../constants/categoryPresets'
 import type { TransactionType, TransactionWithDetails } from '../types'
 
 interface Props {
@@ -42,22 +43,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const [newCategoryIcon, setNewCategoryIcon] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#4CAF50')
   const [addingCategory, setAddingCategory] = useState(false)
-
-  // 円グラフで隣り合っても区別しやすいよう、色相を分散させた18色のプリセット
-  const COLOR_PRESETS = [
-    '#4CAF50', '#FF7043', '#42A5F5', '#AB47BC',
-    '#FFCA28', '#8D6E63', '#26A69A', '#EC407A',
-    '#7E57C2', '#29B6F6', '#9CCC65', '#FFA726',
-    '#5C6BC0', '#EF5350', '#26C6DA', '#D4E157',
-    '#8E24AA', '#78909C'
-  ]
-
-  // 家計簿カテゴリでよく使う絵文字の候補(タップで選択)
-  const ICON_PRESETS = [
-    '🍚', '☕', '🍺', '🚃', '🚗', '✈️', '🏠', '💡',
-    '🧻', '👕', '💊', '🏥', '📚', '🎮', '🎁', '🐶',
-    '📱', '💰', '💳', '🛒', '💇', '⚽', '🎵', '🔧'
-  ]
 
   // 選択中の収入/支出に対応するカテゴリだけを、共有データから絞り込む
   const filteredCategories = categories.filter((c) => c.type === type)
@@ -363,7 +348,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
             <div>
               <label className="text-xs text-gray-500">アイコン</label>
               <div className="grid grid-cols-8 gap-1 mt-1">
-                {ICON_PRESETS.map((icon) => (
+                {CATEGORY_ICON_PRESETS.map((icon) => (
                   <button
                     key={icon}
                     onClick={() => setNewCategoryIcon(icon)}
@@ -389,7 +374,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
             <div>
               <label className="text-xs text-gray-500">色(円グラフの色にもなります)</label>
               <div className="flex flex-wrap gap-2 mt-1">
-                {COLOR_PRESETS.map((c) => (
+                {CATEGORY_COLOR_PRESETS.map((c) => (
                   <button
                     key={c}
                     onClick={() => setNewCategoryColor(c)}

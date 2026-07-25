@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { todayJst } from '../utils/date'
+import CalculatorInput from '../components/CalculatorInput'
 import type { Category, PaymentMethod, Scope, TransactionType, TransactionWithDetails } from '../types'
 
 interface Props {
@@ -10,7 +11,8 @@ interface Props {
 
 export default function InputScreen({ editTransaction = null, onEditDone }: Props) {
   const [type, setType] = useState<TransactionType>('expense')
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(0)
+  const [calcKey, setCalcKey] = useState(0) // 計算機の内部状態をリセットするための再マウント用キー
   const [date, setDate] = useState(todayJst())
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [scopeId, setScopeId] = useState<number | null>(null)
@@ -87,7 +89,8 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   useEffect(() => {
     if (editTransaction) {
       setType(editTransaction.type)
-      setAmount(String(editTransaction.amount))
+      setAmount(editTransaction.amount)
+      setCalcKey((k) => k + 1)
       setDate(editTransaction.transaction_date)
       setCategoryId(editTransaction.category_id)
       setScopeId(editTransaction.scope_id)
@@ -124,7 +127,8 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   }
 
   const resetForm = () => {
-    setAmount('')
+    setAmount(0)
+    setCalcKey((k) => k + 1)
     setDate(todayJst())
     setMemo('')
     setPaymentMethodId(null)
@@ -156,8 +160,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const handleSave = async () => {
     setError(null)
 
-    const amountNum = Number(amount)
-    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+    if (!(amount > 0)) {
       setError('金額は0より大きい数値を入力してください')
       return
     }
@@ -174,7 +177,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     try {
       const payload = {
         type,
-        amount: amountNum,
+        amount,
         category_id: categoryId,
         scope_id: scopeId,
         payment_method_id: paymentMethodId,
@@ -240,18 +243,14 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         />
       </div>
 
-      {/* 金額 */}
+      {/* 金額(四則演算対応の計算機入力) */}
       <div>
         <label className="text-xs text-gray-500">金額</label>
-        <div className="flex items-center border rounded-lg px-3 py-2">
-          <span className="text-gray-400 mr-1">¥</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0"
-            className="w-full text-2xl outline-none"
+        <div className="mt-1">
+          <CalculatorInput
+            key={calcKey}
+            initialValue={editingId ? amount : undefined}
+            onChange={setAmount}
           />
         </div>
       </div>

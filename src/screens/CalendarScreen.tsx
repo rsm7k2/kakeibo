@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { nowJstYearMonth, todayJst } from '../utils/date'
-import type { TransactionWithDetails } from '../types'
+import { nowJstYearMonth } from '../utils/date'
+import type { Scope, TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
@@ -28,9 +28,11 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
     return new Date(year, month0, 1)
   })
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
+  const [scopes, setScopes] = useState<Scope[]>([])
   const [loading, setLoading] = useState(false)
-  // 初期選択日は日本時間(JST)基準の「今日」
-  const [selectedDate, setSelectedDate] = useState<string | null>(() => todayJst())
+
+  // 範囲での絞り込み。初期表示は「全て」
+  const [scopeFilter, setScopeFilter] = useState<number | 'all'>('all')
 
   const year = currentMonth.getFullYear()
   const month0 = currentMonth.getMonth() // 0-indexed
@@ -46,29 +48,29 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
       .finally(() => setLoading(false))
   }
 
-  // 月が変わったらデータを再取得する(選択日のリセットは月切替ボタン側で行う)
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month0])
 
-  const goToPrevMonth = () => {
-    setCurrentMonth(new Date(year, month0 - 1, 1))
-    setSelectedDate(null)
-  }
+  useEffect(() => {
+    api.get<Scope[]>('/scopes').then(setScopes)
+  }, [])
 
-  const goToNextMonth = () => {
-    setCurrentMonth(new Date(year, month0 + 1, 1))
-    setSelectedDate(null)
-  }
+  const goToPrevMonth = () => setCurrentMonth(new Date(year, month0 - 1, 1))
+  const goToNextMonth = () => setCurrentMonth(new Date(year, month0 + 1, 1))
 
-  // 日付ごとに集計・グルーピング
-  const byDate = new Map<string, { income: number; expense: number; items: TransactionWithDetails[] }>()
-  for (const t of transactions) {
-    const entry = byDate.get(t.transaction_date) ?? { income: 0, expense: 0, items: [] }
+  // 範囲フィルタを適用した取引一覧(カレンダーグリッド・サマリーで使用)
+  const scopedTransactions = transactions.filter(
+    (t) => scopeFilter === 'all' || t.scope_id === scopeFilter
+  )
+
+  // 日付ごとの収入/支出集計(カレンダーグリッド用)
+  const byDate = new Map<string, { income: number; expense: number }>()
+  for (const t of scopedTransactions) {
+    const entry = byDate.get(t.transaction_date) ?? { income: 0, expense: 0 }
     if (t.type === 'income') entry.income += t.amount
     else entry.expense += t.amount
-    entry.items.push(t)
     byDate.set(t.transaction_date, entry)
   }
 
@@ -80,14 +82,33 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1)
   ]
 
-  const monthIncomeTotal = transactions
+  const monthIncomeTotal = scopedTransactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0)
-  const monthExpenseTotal = transactions
+  const monthExpenseTotal = scopedTransactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0)
 
-  const selectedEntry = selectedDate ? byDate.get(selectedDate) : null
+  // 当月の支出一覧(範囲フィルタ適用、日付降順)
+  const expenseList = scopedTransactions
+    .filter((t) => t.type === 'expense')
+    .sort((a, b) => {
+      if (a.transaction_date !== b.transaction_date) {
+        return a.transaction_date < b.transaction_date ? 1 : -1
+      }
+      return b.id - a.id
+    })
+
+  // 日付ごとにグルーピングして見出しを付けて表示するための整形
+  const groupedByDate: { date: string; items: TransactionWithDetails[] }[] = []
+  for (const t of expenseList) {
+    const last = groupedByDate[groupedByDate.length - 1]
+    if (last && last.date === t.transaction_date) {
+      last.items.push(t)
+    } else {
+      groupedByDate.push({ date: t.transaction_date, items: [t] })
+    }
+  }
 
   return (
     <div className="p-4 pb-24">
@@ -104,7 +125,30 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         </button>
       </div>
 
-      {/* 月間サマリー */}
+      {/* 範囲切替タブ */}
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => setScopeFilter('all')}
+          className={`flex-1 py-2 rounded-lg text-sm border ${
+            scopeFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
+          }`}
+        >
+          全て
+        </button>
+        {scopes.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setScopeFilter(s.id)}
+            className={`flex-1 py-2 rounded-lg text-sm border ${
+              scopeFilter === s.id ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'
+            }`}
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+
+      {/* 月間サマリー(範囲フィルタ反映) */}
       <div className="flex justify-around text-sm mb-4 border rounded-lg py-2">
         <div className="text-center">
           <div className="text-gray-400 text-xs">収入</div>
@@ -129,20 +173,14 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         ))}
       </div>
 
-      {/* カレンダーグリッド */}
+      {/* カレンダーグリッド(表示のみ、タップ操作なし) */}
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, i) => {
           if (day === null) return <div key={`pad-${i}`} />
           const ymd = formatYmd(year, month0, day)
           const entry = byDate.get(ymd)
           return (
-            <button
-              key={ymd}
-              onClick={() => setSelectedDate(ymd)}
-              className={`aspect-square border rounded-lg p-1 text-left ${
-                selectedDate === ymd ? 'border-gray-800' : 'border-gray-200'
-              }`}
-            >
+            <div key={ymd} className="aspect-square border border-gray-200 rounded-lg p-1 text-left">
               <div className="text-xs">{day}</div>
               {entry && entry.expense > 0 && (
                 <div className="text-[9px] text-red-500 leading-tight truncate">
@@ -154,57 +192,64 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                   +{yen(entry.income)}
                 </div>
               )}
-            </button>
+            </div>
           )
         })}
       </div>
 
-      {/* 選択した日の内訳(カレンダー直下に表示) */}
-      {selectedDate && (
-        <div className="mt-4 bg-white border rounded-2xl shadow-sm">
-          <div className="flex items-center justify-between p-3 border-b">
-            <h2 className="font-bold text-sm">{selectedDate} の内訳</h2>
-            <button onClick={() => setSelectedDate(null)} className="text-gray-400 text-sm">
-              閉じる
-            </button>
-          </div>
-          {(!selectedEntry || selectedEntry.items.length === 0) && (
-            <p className="p-4 text-sm text-gray-400">この日の記録はありません</p>
+      {/* 当月の支出一覧(日付降順) */}
+      <div className="mt-4">
+        <h2 className="text-sm font-bold text-gray-600 mb-2">
+          {month0 + 1}月の支出一覧
+          {scopeFilter !== 'all' && (
+            <span className="text-gray-400 font-normal">
+              (
+              {scopes.find((s) => s.id === scopeFilter)?.name}
+              )
+            </span>
           )}
-          <div className="divide-y">
-            {selectedEntry?.items.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => onEditTransaction(t)}
-                className="w-full flex items-center gap-2 p-3 text-left active:bg-gray-50"
-              >
-                <span
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
-                  style={{ backgroundColor: t.category_color }}
-                >
-                  {t.category_icon ?? '•'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold truncate">{t.category_name}</div>
-                  <div className="text-[10px] text-gray-400 truncate">
-                    {t.scope_name}
-                    {t.payment_method_name ? ` ・ ${t.payment_method_name}` : ''}
-                    {t.memo ? ` ・ ${t.memo}` : ''}
-                  </div>
-                </div>
-                <div
-                  className={`text-sm font-bold shrink-0 ${
-                    t.type === 'income' ? 'text-green-600' : 'text-red-500'
-                  }`}
-                >
-                  {t.type === 'income' ? '+' : '-'}¥{yen(t.amount)}
-                </div>
-                <span className="text-gray-300 text-xs shrink-0">＞</span>
-              </button>
-            ))}
-          </div>
+        </h2>
+
+        {groupedByDate.length === 0 && !loading && (
+          <p className="text-sm text-gray-400 py-4 text-center">この条件の支出データはありません</p>
+        )}
+
+        <div className="bg-white border rounded-2xl divide-y overflow-hidden">
+          {groupedByDate.map((group) => (
+            <div key={group.date}>
+              <div className="bg-gray-50 px-3 py-1 text-xs text-gray-500 font-bold">
+                {group.date}
+              </div>
+              <div className="divide-y">
+                {group.items.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => onEditTransaction(t)}
+                    className="w-full flex items-center gap-2 p-3 text-left active:bg-gray-50"
+                  >
+                    <span
+                      className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
+                      style={{ backgroundColor: t.category_color }}
+                    >
+                      {t.category_icon ?? '•'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold truncate">{t.category_name}</div>
+                      <div className="text-[10px] text-gray-400 truncate">
+                        {t.scope_name}
+                        {t.payment_method_name ? ` ・ ${t.payment_method_name}` : ''}
+                        {t.memo ? ` ・ ${t.memo}` : ''}
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold text-red-500 shrink-0">-¥{yen(t.amount)}</div>
+                    <span className="text-gray-300 text-xs shrink-0">＞</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }

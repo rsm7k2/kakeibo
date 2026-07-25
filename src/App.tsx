@@ -5,9 +5,10 @@ import CalendarScreen from './screens/CalendarScreen'
 import ReportScreen from './screens/ReportScreen'
 import BudgetScreen from './screens/BudgetScreen'
 import MenuScreen from './screens/MenuScreen'
+import { AppDataProvider } from './contexts/AppDataContext'
 import type { NavTab, TransactionWithDetails } from './types'
 
-export default function App() {
+function AppContent() {
   // 初期表示画面は「入力」で固定(前回の設計確認どおり)
   const [activeTab, setActiveTab] = useState<NavTab>('input')
 
@@ -19,30 +20,36 @@ export default function App() {
     setActiveTab('input')
   }
 
-  const renderScreen = () => {
-    switch (activeTab) {
-      case 'input':
-        return (
-          <InputScreen
-            editTransaction={editingTransaction}
-            onEditDone={() => setEditingTransaction(null)}
-          />
-        )
-      case 'calendar':
-        return <CalendarScreen onEditTransaction={handleEditTransaction} />
-      case 'report':
-        return <ReportScreen />
-      case 'budget':
-        return <BudgetScreen />
-      case 'menu':
-        return <MenuScreen />
-    }
-  }
-
+  // 画面はアンマウントせず、CSSの表示/非表示切り替えで保持する。
+  // これにより、タブを切り替えるたびにカテゴリ・範囲・支払い方法・収支データを
+  // 再取得する必要がなくなり、2回目以降の切り替えがほぼ瞬時になる。
   return (
     <div className="min-h-screen pb-16">
-      {renderScreen()}
+      <div className={activeTab === 'input' ? '' : 'hidden'}>
+        <InputScreen editTransaction={editingTransaction} onEditDone={() => setEditingTransaction(null)} />
+      </div>
+      <div className={activeTab === 'calendar' ? '' : 'hidden'}>
+        <CalendarScreen onEditTransaction={handleEditTransaction} />
+      </div>
+      <div className={activeTab === 'report' ? '' : 'hidden'}>
+        <ReportScreen />
+      </div>
+      <div className={activeTab === 'budget' ? '' : 'hidden'}>
+        <BudgetScreen />
+      </div>
+      <div className={activeTab === 'menu' ? '' : 'hidden'}>
+        <MenuScreen />
+      </div>
+
       <BottomNav active={activeTab} onChange={setActiveTab} />
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AppDataProvider>
+      <AppContent />
+    </AppDataProvider>
   )
 }

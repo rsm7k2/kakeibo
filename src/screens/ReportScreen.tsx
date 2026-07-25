@@ -12,7 +12,8 @@ import {
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { api } from '../api/client'
 import { nowJstYearMonth } from '../utils/date'
-import type { Scope, TransactionType, TransactionWithDetails } from '../types'
+import { useAppData } from '../contexts/AppDataContext'
+import type { TransactionType, TransactionWithDetails } from '../types'
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend, ChartDataLabels)
 
@@ -58,6 +59,8 @@ function lastDayOf(year: number, month0: number): number {
 }
 
 export default function ReportScreen() {
+  const { scopes, transactionsVersion } = useAppData()
+
   const [periodType, setPeriodType] = useState<PeriodType>('month')
 
   const { year: initYear, month0: initMonth0 } = nowJstYearMonth()
@@ -67,7 +70,6 @@ export default function ReportScreen() {
   const [scopeFilter, setScopeFilter] = useState<number | 'all'>('all')
   const [txType, setTxType] = useState<TransactionType>('expense')
 
-  const [scopes, setScopes] = useState<Scope[]>([])
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -79,11 +81,8 @@ export default function ReportScreen() {
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    api.get<Scope[]>('/scopes').then(setScopes)
-  }, [])
-
-  // 期間(月間 or 年間)に応じた開始日・終了日を算出して取得
+  // 期間(月間 or 年間)に応じた開始日・終了日を算出して取得。
+  // 他画面での収支データ変更(transactionsVersion)があった場合も再取得する。
   useEffect(() => {
     let start: string
     let end: string
@@ -100,7 +99,7 @@ export default function ReportScreen() {
       .then(setTransactions)
       .finally(() => setLoading(false))
     setDrilldown(null)
-  }, [periodType, year, month0])
+  }, [periodType, year, month0, transactionsVersion])
 
   const goToPrev = () => {
     if (periodType === 'month') {

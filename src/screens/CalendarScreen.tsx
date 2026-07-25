@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { nowJstYearMonth } from '../utils/date'
-import type { Scope, TransactionWithDetails } from '../types'
+import { useAppData } from '../contexts/AppDataContext'
+import type { TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
 
@@ -22,13 +23,14 @@ interface Props {
 }
 
 export default function CalendarScreen({ onEditTransaction }: Props) {
+  const { scopes, transactionsVersion } = useAppData()
+
   // 表示中の月(その月の1日を保持)。初期値は日本時間(JST)基準の「今月」。
   const [currentMonth, setCurrentMonth] = useState(() => {
     const { year, month0 } = nowJstYearMonth()
     return new Date(year, month0, 1)
   })
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
-  const [scopes, setScopes] = useState<Scope[]>([])
   const [loading, setLoading] = useState(false)
 
   // 範囲での絞り込み。初期表示は「全て」
@@ -48,14 +50,13 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
       .finally(() => setLoading(false))
   }
 
+  // 表示月が変わった時、または他画面で収支データが変更された時(transactionsVersion)に再取得する。
+  // 画面はタブ切替で破棄されないため、transactionsVersionへの依存がないと
+  // 他画面での保存・編集・削除がこの画面に反映されないままになる。
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month0])
-
-  useEffect(() => {
-    api.get<Scope[]>('/scopes').then(setScopes)
-  }, [])
+  }, [year, month0, transactionsVersion])
 
   const goToPrevMonth = () => setCurrentMonth(new Date(year, month0 - 1, 1))
   const goToNextMonth = () => setCurrentMonth(new Date(year, month0 + 1, 1))

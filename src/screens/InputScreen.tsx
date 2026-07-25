@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { todayJst } from '../utils/date'
 import CalculatorInput from '../components/CalculatorInput'
-import type { Category, PaymentMethod, Scope, TransactionType, TransactionWithDetails } from '../types'
+import { useAppData } from '../contexts/AppDataContext'
+import type { TransactionType, TransactionWithDetails } from '../types'
 
 interface Props {
   editTransaction?: TransactionWithDetails | null
@@ -10,6 +11,9 @@ interface Props {
 }
 
 export default function InputScreen({ editTransaction = null, onEditDone }: Props) {
+  const { categories, scopes, paymentMethods, loadingMaster, reloadCategories, bumpTransactionsVersion } =
+    useAppData()
+
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState(0)
   const [showCalculator, setShowCalculator] = useState(false)
@@ -21,10 +25,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
 
   // 編集対象のトランザクションID(nullなら新規登録モード)
   const [editingId, setEditingId] = useState<number | null>(null)
-
-  const [categories, setCategories] = useState<Category[]>([])
-  const [scopes, setScopes] = useState<Scope[]>([])
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
 
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -54,36 +54,30 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     '📱', '💰', '💳', '🛒', '💇', '⚽', '🎵', '🔧'
   ]
 
-  const reloadCategories = async (selectId?: number) => {
-    const data = await api.get<Category[]>(`/categories?type=${type}`)
-    setCategories(data)
-    if (selectId) {
-      setCategoryId(selectId)
-    } else if (data.length > 0) {
-      setCategoryId(data[0].id)
-    } else {
-      setCategoryId(null)
+  // 選択中の収入/支出に対応するカテゴリだけを、共有データから絞り込む
+  const filteredCategories = categories.filter((c) => c.type === type)
+
+  // 範囲(scope)のデフォルト選択(共有データが届いた後、まだ何も選ばれていなければ先頭を選ぶ)
+  useEffect(() => {
+    if (scopes.length > 0 && scopeId === null) {
+      setScopeId(scopes[0].id)
     }
-  }
+  }, [scopes, scopeId])
 
-  // 範囲・支払い方法は type に依存しないため初回のみ取得
+  // 収入/支出の切り替え、または編集対象の変化に応じてカテゴリの選択状態を調整する
   useEffect(() => {
-    api.get<Scope[]>('/scopes').then((data) => {
-      setScopes(data)
-      if (data.length > 0) setScopeId(data[0].id)
-    })
-    api.get<PaymentMethod[]>('/payment_methods').then(setPaymentMethods)
-  }, [])
-
-  // カテゴリは収入/支出の切り替えに応じて再取得し、選択状態をリセットする
-  // (編集モードの場合は、編集対象のカテゴリを選択した状態にする)
-  useEffect(() => {
-    const selectId =
-      editTransaction && editTransaction.type === type ? editTransaction.category_id : undefined
-    reloadCategories(selectId)
+    if (filteredCategories.length === 0) {
+      setCategoryId(null)
+      return
+    }
+    const editMatch =
+      editTransaction && editTransaction.type === type
+        ? filteredCategories.find((c) => c.id === editTransaction.category_id)
+        : undefined
+    setCategoryId(editMatch ? editMatch.id : filteredCategories[0].id)
     setShowAddCategory(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, editTransaction])
+  }, [type, editTransaction, categories])
 
   // カレンダー画面から編集対象が渡された場合、フォームに反映する
   useEffect(() => {
@@ -91,7 +85,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       setType(editTransaction.type)
       setAmount(editTransaction.amount)
       setDate(editTransaction.transaction_date)
-      setCategoryId(editTransaction.category_id)
       setScopeId(editTransaction.scope_id)
       setPaymentMethodId(editTransaction.payment_method_id)
       setMemo(editTransaction.memo ?? '')
@@ -113,7 +106,8 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         icon: newCategoryIcon || null,
         color: newCategoryColor
       })
-      await reloadCategories(res.id)
+      await reloadCategories()
+      setCategoryId(res.id)
       setNewCategoryName('')
       setNewCategoryIcon('')
       setNewCategoryColor('#4CAF50')
@@ -146,6 +140,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     setError(null)
     try {
       await api.delete(`/transactions/${editingId}`)
+      bumpTransactionsVersion()
       resetForm()
       onEditDone?.()
     } catch {
@@ -184,10 +179,12 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       }
       if (editingId) {
         await api.put(`/transactions/${editingId}`, payload)
+        bumpTransactionsVersion()
         resetForm()
         onEditDone?.()
       } else {
         await api.post('/transactions', payload)
+        bumpTransactionsVersion()
         resetForm()
       }
       setSavedMessage(true)
@@ -197,6 +194,10 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
     } finally {
       setSaving(false)
     }
+  }
+
+  if (loadingMaster) {
+    return <p className="p-4 text-center text-gray-400 text-sm">読み込み中...</p>
   }
 
   return (
@@ -279,7 +280,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       <div>
         <label className="text-xs text-gray-500">カテゴリ</label>
         <div className="grid grid-cols-4 gap-2 mt-1">
-          {categories.map((c) => (
+          {filteredCategories.map((c) => (
             <button
               key={c.id}
               onClick={() => setCategoryId(c.id)}

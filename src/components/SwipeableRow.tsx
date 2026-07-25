@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 
 const REVEAL_WIDTH = 80 // 削除ボタンの表示幅(px)
 const DIRECTION_LOCK_THRESHOLD = 6 // この移動量を超えるまでは方向を確定しない(px)
@@ -19,29 +19,28 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   const startYRef = useRef(0)
   const baseXRef = useRef(0)
   const directionRef = useRef<Direction>(null)
-  const pointerIdRef = useRef<number | null>(null)
+
+  // 指の移動量計測は「横スワイプで削除ボタンを表示するアニメーション」専用。
+  // タップ(編集画面への遷移)の判定はここでは行わず、ネイティブのclickイベントに任せる。
+  // ブラウザは、タッチ後にスクロールが発生した場合は合成clickを発火しないため、
+  // 縦スクロール中に誤って編集画面へ遷移することがなくなる。
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     startXRef.current = e.clientX
     startYRef.current = e.clientY
     baseXRef.current = translateX
     directionRef.current = null
-    pointerIdRef.current = e.pointerId
-    // この時点ではまだポインタをキャプチャしない(縦スクロールの可能性があるため)
   }
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (pointerIdRef.current === null) return
     const deltaX = e.clientX - startXRef.current
     const deltaY = e.clientY - startYRef.current
 
     if (directionRef.current === null) {
-      // 一定量動くまでは、横スワイプか縦スクロールか判定しない
       if (Math.abs(deltaX) < DIRECTION_LOCK_THRESHOLD && Math.abs(deltaY) < DIRECTION_LOCK_THRESHOLD) {
         return
       }
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        // 横方向優位 → スワイプ削除の操作として扱う
         directionRef.current = 'horizontal'
         setDragging(true)
         try {
@@ -50,7 +49,6 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
           // no-op
         }
       } else {
-        // 縦方向優位 → スクロール操作とみなし、以降は何もしない(ブラウザ標準のスクロールに委ねる)
         directionRef.current = 'vertical'
         return
       }
@@ -63,29 +61,23 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   }
 
   const handlePointerUp = () => {
-    const direction = directionRef.current
-    pointerIdRef.current = null
+    const wasHorizontalDrag = directionRef.current === 'horizontal'
     directionRef.current = null
     setDragging(false)
+    if (wasHorizontalDrag) {
+      // 横スワイプの移動量に応じて全開 or 全閉にスナップする
+      setTranslateX((current) => (current < -REVEAL_WIDTH / 2 ? -REVEAL_WIDTH : 0))
+    }
+  }
 
-    if (direction === 'vertical') {
-      // スクロール操作だったので、タップ扱いにもスワイプ扱いにもしない
+  const handleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (translateX !== 0) {
+      // 削除ボタンが開いた状態でのタップは閉じるだけにする
+      e.preventDefault()
+      setTranslateX(0)
       return
     }
-
-    if (direction === null) {
-      // ほとんど動いていない = タップ
-      if (translateX === 0) {
-        onClick()
-      } else {
-        // 開いた状態でのタップは閉じるだけにする
-        setTranslateX(0)
-      }
-      return
-    }
-
-    // 横スワイプ操作だった場合、移動量に応じて全開 or 全閉にスナップする
-    setTranslateX(translateX < -REVEAL_WIDTH / 2 ? -REVEAL_WIDTH : 0)
+    onClick()
   }
 
   return (
@@ -104,6 +96,7 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onClick={handleClick}
         style={{
           transform: `translateX(${translateX}px)`,
           transition: dragging ? 'none' : 'transform 0.2s ease-out',

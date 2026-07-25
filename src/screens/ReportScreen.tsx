@@ -54,6 +54,25 @@ function yen(n: number): string {
   return Math.round(n).toLocaleString('ja-JP')
 }
 
+/**
+ * 構成比(%)の表示用フォーマット。
+ * - 切り捨て(四捨五入ではない)にすることで、全カテゴリの表示%の合計が
+ *   実際の合計(100%)を超えないことを保証する。
+ * - 小数第1位で切り捨てると 0.0% になってしまう極小値は、
+ *   0でない桁が現れるまで(最大6桁まで)表示桁数を増やす。
+ */
+function formatPercent(value: number, total: number): string {
+  if (total <= 0 || value <= 0) return '0.0%'
+  const raw = (value / total) * 100
+  let decimals = 1
+  let floored = Math.floor(raw * 10 ** decimals) / 10 ** decimals
+  while (floored === 0 && decimals < 6) {
+    decimals++
+    floored = Math.floor(raw * 10 ** decimals) / 10 ** decimals
+  }
+  return `${floored.toFixed(decimals)}%`
+}
+
 function lastDayOf(year: number, month0: number): number {
   return new Date(year, month0 + 1, 0).getDate()
 }
@@ -530,7 +549,6 @@ export default function ReportScreen() {
           {/* 内訳リスト(行クリックで月別推移の棒グラフを表示) */}
           <div className="bg-white border rounded-2xl divide-y overflow-hidden">
             {categoryBreakdown.map((c) => {
-              const percent = targetTotal > 0 ? (c.total / targetTotal) * 100 : 0
               return (
                 <button
                   key={c.id}
@@ -543,7 +561,7 @@ export default function ReportScreen() {
                   />
                   <span className="text-lg shrink-0">{c.icon ?? '•'}</span>
                   <span className="flex-1 text-sm font-bold truncate">{c.name}</span>
-                  <span className="text-xs text-gray-400 shrink-0">{percent.toFixed(1)}%</span>
+                  <span className="text-xs text-gray-400 shrink-0">{formatPercent(c.total, targetTotal)}</span>
                   <span className="text-sm font-bold shrink-0">¥{yen(c.total)}</span>
                   <span className="text-gray-300 text-xs shrink-0">＞</span>
                 </button>

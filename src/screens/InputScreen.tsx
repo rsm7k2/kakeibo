@@ -242,6 +242,17 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         />
       </div>
 
+      {/* メモ(任意) */}
+      <div>
+        <label className="text-xs text-gray-500">メモ(任意)</label>
+        <input
+          type="text"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          className="w-full border rounded-lg px-3 py-2"
+        />
+      </div>
+
       {/* 金額(タップで計算機オーバーレイを表示) */}
       <div>
         <label className="text-xs text-gray-500">金額</label>
@@ -427,17 +438,6 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
             </option>
           ))}
         </select>
-      </div>
-
-      {/* メモ(任意) */}
-      <div>
-        <label className="text-xs text-gray-500">メモ(任意)</label>
-        <input
-          type="text"
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2"
-        />
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}

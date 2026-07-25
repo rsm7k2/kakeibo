@@ -77,6 +77,16 @@ export default function CalculatorInput({ initialValue, onChange }: Props) {
     setJustPressedOperator(true)
   }
 
+  const pressDoubleZero = () => {
+    if (justPressedOperator) {
+      setDisplay('0')
+      setJustPressedOperator(false)
+      return
+    }
+    if (display === '0') return
+    setDisplay(display + '00')
+  }
+
   const pressClear = () => {
     setDisplay('0')
     setAccumulator(null)
@@ -166,8 +176,11 @@ export default function CalculatorInput({ initialValue, onChange }: Props) {
           ＝
         </button>
 
-        <button onClick={() => pressDigit('0')} className={`${numClass} col-span-3`} type="button">
+        <button onClick={() => pressDigit('0')} className={`${numClass} col-span-2`} type="button">
           0
+        </button>
+        <button onClick={pressDoubleZero} className={numClass} type="button">
+          00
         </button>
         <button onClick={() => pressDigit('.')} className={numClass} type="button">
           .

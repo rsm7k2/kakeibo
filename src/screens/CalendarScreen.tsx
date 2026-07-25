@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { nowJstYearMonth } from '../utils/date'
 import { useAppData } from '../contexts/AppDataContext'
+import SwipeableRow from '../components/SwipeableRow'
 import type { TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
@@ -23,7 +24,7 @@ interface Props {
 }
 
 export default function CalendarScreen({ onEditTransaction }: Props) {
-  const { scopes, transactionsVersion } = useAppData()
+  const { scopes, transactionsVersion, bumpTransactionsVersion } = useAppData()
 
   // 表示中の月(その月の1日を保持)。初期値は日本時間(JST)基準の「今月」。
   const [currentMonth, setCurrentMonth] = useState(() => {
@@ -60,6 +61,12 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
 
   const goToPrevMonth = () => setCurrentMonth(new Date(year, month0 - 1, 1))
   const goToNextMonth = () => setCurrentMonth(new Date(year, month0 + 1, 1))
+
+  const handleDeleteTransaction = async (id: number) => {
+    if (!confirm('この収支データを削除しますか?元に戻せません。')) return
+    await api.delete(`/transactions/${id}`)
+    bumpTransactionsVersion()
+  }
 
   // 範囲フィルタを適用した取引一覧(カレンダーグリッド・サマリーで使用)
   const scopedTransactions = transactions.filter(
@@ -223,28 +230,30 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
               </div>
               <div className="divide-y">
                 {group.items.map((t) => (
-                  <button
+                  <SwipeableRow
                     key={t.id}
                     onClick={() => onEditTransaction(t)}
-                    className="w-full flex items-center gap-2 p-3 text-left active:bg-gray-50"
+                    onDelete={() => handleDeleteTransaction(t.id)}
                   >
-                    <span
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
-                      style={{ backgroundColor: t.category_color }}
-                    >
-                      {t.category_icon ?? '•'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold truncate">{t.category_name}</div>
-                      <div className="text-[10px] text-gray-400 truncate">
-                        {t.scope_name}
-                        {t.payment_method_name ? ` ・ ${t.payment_method_name}` : ''}
-                        {t.memo ? ` ・ ${t.memo}` : ''}
+                    <div className="w-full flex items-center gap-2 p-3 text-left">
+                      <span
+                        className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
+                        style={{ backgroundColor: t.category_color }}
+                      >
+                        {t.category_icon ?? '•'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold truncate">{t.category_name}</div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          {t.scope_name}
+                          {t.payment_method_name ? ` ・ ${t.payment_method_name}` : ''}
+                          {t.memo ? ` ・ ${t.memo}` : ''}
+                        </div>
                       </div>
+                      <div className="text-sm font-bold text-red-500 shrink-0">-¥{yen(t.amount)}</div>
+                      <span className="text-gray-300 text-xs shrink-0">＞</span>
                     </div>
-                    <div className="text-sm font-bold text-red-500 shrink-0">-¥{yen(t.amount)}</div>
-                    <span className="text-gray-300 text-xs shrink-0">＞</span>
-                  </button>
+                  </SwipeableRow>
                 ))}
               </div>
             </div>

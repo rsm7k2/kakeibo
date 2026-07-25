@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { nowJstYearMonth } from '../utils/date'
 import type { TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
@@ -21,15 +22,14 @@ interface Props {
 }
 
 export default function CalendarScreen({ onEditTransaction }: Props) {
-  // 表示中の月(その月の1日を保持)
+  // 表示中の月(その月の1日を保持)。初期値は日本時間(JST)基準の「今月」。
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const d = new Date()
-    return new Date(d.getFullYear(), d.getMonth(), 1)
+    const { year, month0 } = nowJstYearMonth()
+    return new Date(year, month0, 1)
   })
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   const year = currentMonth.getFullYear()
   const month0 = currentMonth.getMonth() // 0-indexed
@@ -75,17 +75,6 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
   const monthExpenseTotal = transactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0)
-
-  const handleDelete = async (id: number) => {
-    if (!confirm('この収支データを削除しますか?')) return
-    setDeletingId(id)
-    try {
-      await api.delete(`/transactions/${id}`)
-      load()
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   const selectedEntry = selectedDate ? byDate.get(selectedDate) : null
 
@@ -165,10 +154,10 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         })}
       </div>
 
-      {/* 選択した日の内訳(下部シート) */}
+      {/* 選択した日の内訳(カレンダー直下に表示) */}
       {selectedDate && (
-        <div className="fixed bottom-16 left-0 right-0 bg-white border-t rounded-t-2xl shadow-lg max-h-[50vh] overflow-y-auto">
-          <div className="flex items-center justify-between p-3 border-b sticky top-0 bg-white">
+        <div className="mt-4 bg-white border rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between p-3 border-b">
             <h2 className="font-bold text-sm">{selectedDate} の内訳</h2>
             <button onClick={() => setSelectedDate(null)} className="text-gray-400 text-sm">
               閉じる
@@ -179,7 +168,11 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
           )}
           <div className="divide-y">
             {selectedEntry?.items.map((t) => (
-              <div key={t.id} className="flex items-center gap-2 p-3">
+              <button
+                key={t.id}
+                onClick={() => onEditTransaction(t)}
+                className="w-full flex items-center gap-2 p-3 text-left active:bg-gray-50"
+              >
                 <span
                   className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
                   style={{ backgroundColor: t.category_color }}
@@ -201,22 +194,8 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                 >
                   {t.type === 'income' ? '+' : '-'}¥{yen(t.amount)}
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <button
-                    onClick={() => onEditTransaction(t)}
-                    className="text-[10px] text-blue-500 underline"
-                  >
-                    編集
-                  </button>
-                  <button
-                    onClick={() => handleDelete(t.id)}
-                    disabled={deletingId === t.id}
-                    className="text-[10px] text-red-400 underline disabled:opacity-50"
-                  >
-                    削除
-                  </button>
-                </div>
-              </div>
+                <span className="text-gray-300 text-xs shrink-0">＞</span>
+              </button>
             ))}
           </div>
         </div>

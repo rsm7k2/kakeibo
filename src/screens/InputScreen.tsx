@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { todayJst } from '../utils/date'
 import type { Category, PaymentMethod, Scope, TransactionType, TransactionWithDetails } from '../types'
-
-function today(): string {
-  const d = new Date()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${mm}-${dd}`
-}
 
 interface Props {
   editTransaction?: TransactionWithDetails | null
@@ -17,7 +11,7 @@ interface Props {
 export default function InputScreen({ editTransaction = null, onEditDone }: Props) {
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
-  const [date, setDate] = useState(today())
+  const [date, setDate] = useState(todayJst())
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [scopeId, setScopeId] = useState<number | null>(null)
   const [paymentMethodId, setPaymentMethodId] = useState<number | null>(null)
@@ -31,6 +25,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
 
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedMessage, setSavedMessage] = useState(false)
 
@@ -130,7 +125,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
 
   const resetForm = () => {
     setAmount('')
-    setDate(today())
+    setDate(todayJst())
     setMemo('')
     setPaymentMethodId(null)
     setEditingId(null)
@@ -140,6 +135,22 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const handleCancelEdit = () => {
     resetForm()
     onEditDone?.()
+  }
+
+  const handleDelete = async () => {
+    if (!editingId) return
+    if (!confirm('この収支データを削除しますか?元に戻せません。')) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await api.delete(`/transactions/${editingId}`)
+      resetForm()
+      onEditDone?.()
+    } catch {
+      setError('削除に失敗しました。通信環境を確認して再度お試しください。')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleSave = async () => {
@@ -419,6 +430,16 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       >
         {saving ? '保存中...' : editingId ? '更新する' : '保存する'}
       </button>
+
+      {editingId && (
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="w-full border border-red-400 text-red-500 font-bold py-3 rounded-lg disabled:opacity-50"
+        >
+          {deleting ? '削除中...' : 'この収支データを削除する'}
+        </button>
+      )}
     </div>
   )
 }

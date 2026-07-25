@@ -33,9 +33,13 @@ export default function InputScreen() {
   const [newCategoryColor, setNewCategoryColor] = useState('#4CAF50')
   const [addingCategory, setAddingCategory] = useState(false)
 
+  // 円グラフで隣り合っても区別しやすいよう、色相を分散させた18色のプリセット
   const COLOR_PRESETS = [
     '#4CAF50', '#FF7043', '#42A5F5', '#AB47BC',
-    '#FFCA28', '#8D6E63', '#26A69A', '#EC407A'
+    '#FFCA28', '#8D6E63', '#26A69A', '#EC407A',
+    '#7E57C2', '#29B6F6', '#9CCC65', '#FFA726',
+    '#5C6BC0', '#EF5350', '#26C6DA', '#D4E157',
+    '#8E24AA', '#78909C'
   ]
 
   // 家計簿カテゴリでよく使う絵文字の候補(タップで選択)
@@ -272,7 +276,7 @@ export default function InputScreen() {
             </div>
             <div>
               <label className="text-xs text-gray-500">色(円グラフの色にもなります)</label>
-              <div className="flex gap-2 mt-1">
+              <div className="flex flex-wrap gap-2 mt-1">
                 {COLOR_PRESETS.map((c) => (
                   <button
                     key={c}
@@ -283,6 +287,16 @@ export default function InputScreen() {
                     style={{ backgroundColor: c }}
                   />
                 ))}
+                {/* プリセットにない色を使いたい場合の自由選択 */}
+                <label className="w-7 h-7 rounded-full border-2 border-dashed border-gray-400 flex items-center justify-center text-[10px] text-gray-400 cursor-pointer overflow-hidden">
+                  ？
+                  <input
+                    type="color"
+                    value={newCategoryColor}
+                    onChange={(e) => setNewCategoryColor(e.target.value)}
+                    className="opacity-0 w-0 h-0 absolute"
+                  />
+                </label>
               </div>
             </div>
             <div className="flex gap-2 pt-1">

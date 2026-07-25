@@ -76,6 +76,12 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
   const goToPrevMonth = () => setCurrentMonth(new Date(year, month0 - 1, 1))
   const goToNextMonth = () => setCurrentMonth(new Date(year, month0 + 1, 1))
 
+  // カレンダーの日付タップ時、下の支出一覧内の該当日付までスクロールする
+  // (その日の支出まで手でスワイプ移動したのと同じ見た目にする)
+  const scrollToDate = (ymd: string) => {
+    document.getElementById(`expense-date-${ymd}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const handleDeleteTransaction = async (id: number) => {
     if (!confirm('この収支データを削除しますか?元に戻せません。')) return
     await api.delete(`/transactions/${id}`)
@@ -195,14 +201,19 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         ))}
       </div>
 
-      {/* カレンダーグリッド(表示のみ、タップ操作なし) */}
+      {/* カレンダーグリッド(タップでその日の支出一覧までスクロール) */}
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, i) => {
           if (day === null) return <div key={`pad-${i}`} />
           const ymd = formatYmd(year, month0, day)
           const entry = byDate.get(ymd)
           return (
-            <div key={ymd} className="aspect-square border border-gray-200 rounded-lg p-1 text-left">
+            <button
+              key={ymd}
+              type="button"
+              onClick={() => scrollToDate(ymd)}
+              className="aspect-square border border-gray-200 rounded-lg p-1 text-left active:bg-gray-100"
+            >
               <div className="text-xs">{day}</div>
               {entry && entry.expense > 0 && (
                 <div className="text-[9px] text-red-500 leading-tight truncate">
@@ -214,7 +225,7 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                   +{yen(entry.income)}
                 </div>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
@@ -238,7 +249,7 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
 
         <div className="bg-white border rounded-2xl divide-y overflow-hidden">
           {groupedByDate.map((group) => (
-            <div key={group.date}>
+            <div key={group.date} id={`expense-date-${group.date}`} className="scroll-mt-4">
               <div className="bg-gray-50 px-3 py-1 text-xs text-gray-500 font-bold">
                 {group.date}
               </div>

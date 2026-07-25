@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { todayJst } from '../utils/date'
 import CalculatorInput from '../components/CalculatorInput'
@@ -31,6 +31,10 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedMessage, setSavedMessage] = useState(false)
+  // 新規登録時の「保存しました」表示を消すタイマー。画面はタブ切替でアンマウントされないため、
+  // このタイマーが残ったまま編集画面に入ると、前回の「保存しました」が再表示されてしまう。
+  // 編集開始時に確実にキャンセルできるよう ref で保持する。
+  const savedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // カテゴリのクイック追加用
   const [showAddCategory, setShowAddCategory] = useState(false)
@@ -90,6 +94,12 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
       setPaymentMethodId(editTransaction.payment_method_id)
       setMemo(editTransaction.memo ?? '')
       setEditingId(editTransaction.id)
+      // 直前の新規登録による「保存しました」がまだ残っていれば、編集画面に入る時点で消す
+      if (savedMessageTimerRef.current) {
+        clearTimeout(savedMessageTimerRef.current)
+        savedMessageTimerRef.current = null
+      }
+      setSavedMessage(false)
     }
   }, [editTransaction])
 
@@ -188,8 +198,14 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         await api.post('/transactions', payload)
         bumpTransactionsVersion()
         resetForm()
+        if (savedMessageTimerRef.current) {
+          clearTimeout(savedMessageTimerRef.current)
+        }
         setSavedMessage(true)
-        setTimeout(() => setSavedMessage(false), 2000)
+        savedMessageTimerRef.current = setTimeout(() => {
+          setSavedMessage(false)
+          savedMessageTimerRef.current = null
+        }, 2000)
       }
     } catch (e) {
       setError('保存に失敗しました。通信環境を確認して再度お試しください。')

@@ -1,0 +1,16 @@
+name = "kakeibo"
+main = "worker/index.ts"
+compatibility_date = "2026-07-01"
+
+# ビルド後の静的ファイル(dist)を配信する設定
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# D1データベースのバインディング
+# <データベース名> と <database_id> は `wrangler d1 create <データベース名>` 実行後に
+# 発行されるIDに置き換えてください
+[[d1_databases]]
+binding = "DB"
+database_name = "kakeibo-db"
+database_id = "<database_id>"

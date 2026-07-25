@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pie, Bar } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -34,7 +34,14 @@ interface DrilldownTarget {
 }
 
 interface MonthBucket {
+  year: number
+  month0: number
   label: string
+  total: number
+}
+
+interface DayBucket {
+  day: number
   total: number
 }
 
@@ -68,6 +75,9 @@ export default function ReportScreen() {
   const [drilldown, setDrilldown] = useState<DrilldownTarget | null>(null)
   const [drilldownTx, setDrilldownTx] = useState<TransactionWithDetails[]>([])
   const [drilldownLoading, setDrilldownLoading] = useState(false)
+  // 棒グラフで選択中の月(その月の日別内訳を下部に表示する。月間モードのみ使用)
+  const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     api.get<Scope[]>('/scopes').then(setScopes)
@@ -161,13 +171,16 @@ export default function ReportScreen() {
       // 年間モードは、既に取得済みの年間データからそのまま集計できる(再取得不要)
       return
     }
-    // 月間モードは、選択月を含む過去12ヶ月分のデータを別途取得する
-    const totalMonthIndex = year * 12 + month0
+    // 月間モードは、レポート画面で選択中の月に関わらず、
+    // 常にシステム日付(今日・JST)を基準にした直近12ヶ月分のデータを取得する
+    setSelectedBarIndex(11) // デフォルト選択は当月(最新月、配列の末尾)
+    const { year: ny, month0: nm0 } = nowJstYearMonth()
+    const totalMonthIndex = ny * 12 + nm0
     const startTotal = totalMonthIndex - 11
     const startYear = Math.floor(startTotal / 12)
     const startMonth0 = ((startTotal % 12) + 12) % 12
     const start = `${startYear}-${pad2(startMonth0 + 1)}-01`
-    const end = `${year}-${pad2(month0 + 1)}-${pad2(lastDayOf(year, month0))}`
+    const end = `${ny}-${pad2(nm0 + 1)}-${pad2(lastDayOf(ny, nm0))}`
 
     setDrilldownLoading(true)
     try {
@@ -181,6 +194,7 @@ export default function ReportScreen() {
   const closeDrilldown = () => {
     setDrilldown(null)
     setDrilldownTx([])
+    setSelectedBarIndex(null)
   }
 
   // ドリルダウン用の月別バケットを作成(月間モード: 過去12ヶ月 / 年間モード: 1〜12月)
@@ -194,6 +208,8 @@ export default function ReportScreen() {
 
     if (periodType === 'year') {
       const buckets: MonthBucket[] = Array.from({ length: 12 }, (_, m) => ({
+        year,
+        month0: m,
         label: `${m + 1}月`,
         total: 0
       }))
@@ -204,14 +220,19 @@ export default function ReportScreen() {
       return buckets
     }
 
-    // 月間モード: 選択月を含む過去12ヶ月
-    const totalMonthIndex = year * 12 + month0
+    // 月間モード: システム日付(今日・JST)を基準にした直近12ヶ月
+    const { year: ny, month0: nm0 } = nowJstYearMonth()
+    const totalMonthIndex = ny * 12 + nm0
     const startTotal = totalMonthIndex - 11
     const buckets: MonthBucket[] = Array.from({ length: 12 }, (_, i) => {
       const idx = startTotal + i
       const y = Math.floor(idx / 12)
       const m0 = ((idx % 12) + 12) % 12
-      return { label: `${y}/${pad2(m0 + 1)}`, total: 0 }
+      // 年が切り替わる月(先頭、または前のバーと年が異なる月)は「〇年〇月」、それ以外は「〇月」
+      const prevIdx = idx - 1
+      const prevYear = Math.floor(prevIdx / 12)
+      const label = i === 0 || y !== prevYear ? `${y}年${m0 + 1}月` : `${m0 + 1}月`
+      return { year: y, month0: m0, label, total: 0 }
     })
     for (const t of drilldownTx.filter(matches)) {
       const [ty, tm] = t.transaction_date.split('-').map(Number)
@@ -219,6 +240,27 @@ export default function ReportScreen() {
       if (idx >= 0 && idx < 12) buckets[idx].total += t.amount
     }
     return buckets
+  })()
+
+  // 選択中の月(棒グラフでのバー選択)の日別内訳(月間モードのみ)
+  const dailyBuckets: DayBucket[] = (() => {
+    if (!drilldown || periodType !== 'month' || selectedBarIndex === null) return []
+    const bucket = monthBuckets[selectedBarIndex]
+    if (!bucket) return []
+    const matches = (t: TransactionWithDetails) =>
+      t.category_id === drilldown.id &&
+      t.type === txType &&
+      (scopeFilter === 'all' || t.scope_id === scopeFilter)
+    const prefix = `${bucket.year}-${pad2(bucket.month0 + 1)}-`
+    const byDay = new Map<number, number>()
+    for (const t of drilldownTx.filter(matches)) {
+      if (!t.transaction_date.startsWith(prefix)) continue
+      const day = Number(t.transaction_date.slice(8, 10))
+      byDay.set(day, (byDay.get(day) ?? 0) + t.amount)
+    }
+    return Array.from(byDay.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, total]) => ({ day, total }))
   })()
 
   const drilldownTotal = monthBuckets.reduce((s, b) => s + b.total, 0)
@@ -229,10 +271,21 @@ export default function ReportScreen() {
     datasets: [
       {
         data: monthBuckets.map((b) => b.total),
-        backgroundColor: drilldown?.color ?? '#888888'
+        backgroundColor:
+          periodType === 'month'
+            ? monthBuckets.map((_, i) => (i === selectedBarIndex ? drilldown?.color ?? '#888888' : (drilldown?.color ?? '#888888') + '55'))
+            : drilldown?.color ?? '#888888'
       }
     ]
   }
+
+  // 月間モードの棒グラフを開いたら、デフォルトで最新月(右端)が見える位置までスクロールする
+  useEffect(() => {
+    if (periodType === 'month' && drilldown && !drilldownLoading && scrollContainerRef.current) {
+      const el = scrollContainerRef.current
+      el.scrollLeft = el.scrollWidth
+    }
+  }, [periodType, drilldown, drilldownLoading])
 
   // --- ドリルダウン画面(棒グラフ) ---
   if (drilldown) {
@@ -274,31 +327,75 @@ export default function ReportScreen() {
             </div>
 
             {/* 棒グラフ */}
-            <div className="mb-4" style={{ height: 220 }}>
-              <Bar
-                data={barData}
-                options={{
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                    datalabels: { display: false }
-                  },
-                  scales: {
-                    y: { beginAtZero: true }
-                  }
-                }}
-              />
-            </div>
-
-            {/* 月ごとの金額(数字リスト) */}
-            <div className="bg-white border rounded-2xl divide-y overflow-hidden">
-              {monthBuckets.map((b) => (
-                <div key={b.label} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span className="text-gray-500">{b.label}</span>
-                  <span className="font-bold">¥{yen(b.total)}</span>
+            {periodType === 'month' ? (
+              <div ref={scrollContainerRef} className="mb-4 overflow-x-auto">
+                <div style={{ width: `${monthBuckets.length * 72}px`, height: 220 }}>
+                  <Bar
+                    data={barData}
+                    options={{
+                      maintainAspectRatio: false,
+                      onClick: (_evt, elements) => {
+                        if (elements.length > 0) setSelectedBarIndex(elements[0].index)
+                      },
+                      plugins: {
+                        legend: { display: false },
+                        datalabels: { display: false }
+                      },
+                      scales: {
+                        y: { beginAtZero: true }
+                      }
+                    }}
+                  />
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="mb-4" style={{ height: 220 }}>
+                <Bar
+                  data={barData}
+                  options={{
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { display: false },
+                      datalabels: { display: false }
+                    },
+                    scales: {
+                      y: { beginAtZero: true }
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* 下部リスト: 月間モードは選択中の月の日別内訳、年間モードは月ごとの金額 */}
+            {periodType === 'month' ? (
+              <>
+                <h3 className="text-sm font-bold text-gray-600 mb-2">
+                  {selectedBarIndex !== null && monthBuckets[selectedBarIndex]
+                    ? `${monthBuckets[selectedBarIndex].year}年${monthBuckets[selectedBarIndex].month0 + 1}月の日別内訳`
+                    : '月を選択してください'}
+                </h3>
+                <div className="bg-white border rounded-2xl divide-y overflow-hidden">
+                  {dailyBuckets.length === 0 && (
+                    <p className="text-sm text-gray-400 py-4 text-center">この月のデータはありません</p>
+                  )}
+                  {dailyBuckets.map((d) => (
+                    <div key={d.day} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <span className="text-gray-500">{d.day}日</span>
+                      <span className="font-bold">¥{yen(d.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="bg-white border rounded-2xl divide-y overflow-hidden">
+                {monthBuckets.map((b) => (
+                  <div key={b.label} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="text-gray-500">{b.label}</span>
+                    <span className="font-bold">¥{yen(b.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

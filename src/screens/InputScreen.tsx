@@ -183,13 +183,14 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         bumpTransactionsVersion()
         resetForm()
         onEditDone?.()
+        // 更新後はカレンダー画面へ遷移するため、この画面上でのメッセージ表示は不要
       } else {
         await api.post('/transactions', payload)
         bumpTransactionsVersion()
         resetForm()
+        setSavedMessage(true)
+        setTimeout(() => setSavedMessage(false), 2000)
       }
-      setSavedMessage(true)
-      setTimeout(() => setSavedMessage(false), 2000)
     } catch (e) {
       setError('保存に失敗しました。通信環境を確認して再度お試しください。')
     } finally {

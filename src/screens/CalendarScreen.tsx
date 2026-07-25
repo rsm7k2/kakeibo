@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { nowJstYearMonth } from '../utils/date'
+import { nowJstYearMonth, todayJst } from '../utils/date'
 import type { TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
@@ -29,7 +29,8 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
   })
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
   const [loading, setLoading] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // 初期選択日は日本時間(JST)基準の「今日」
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => todayJst())
 
   const year = currentMonth.getFullYear()
   const month0 = currentMonth.getMonth() // 0-indexed
@@ -45,11 +46,21 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
       .finally(() => setLoading(false))
   }
 
+  // 月が変わったらデータを再取得する(選択日のリセットは月切替ボタン側で行う)
   useEffect(() => {
     load()
-    setSelectedDate(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month0])
+
+  const goToPrevMonth = () => {
+    setCurrentMonth(new Date(year, month0 - 1, 1))
+    setSelectedDate(null)
+  }
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(year, month0 + 1, 1))
+    setSelectedDate(null)
+  }
 
   // 日付ごとに集計・グルーピング
   const byDate = new Map<string, { income: number; expense: number; items: TransactionWithDetails[] }>()
@@ -82,19 +93,13 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
     <div className="p-4 pb-24">
       {/* 月切替 */}
       <div className="flex items-center justify-between mb-3">
-        <button
-          onClick={() => setCurrentMonth(new Date(year, month0 - 1, 1))}
-          className="px-3 py-1 text-gray-500"
-        >
+        <button onClick={goToPrevMonth} className="px-3 py-1 text-gray-500">
           ＜
         </button>
         <h1 className="text-lg font-bold">
           {year}年{month0 + 1}月
         </h1>
-        <button
-          onClick={() => setCurrentMonth(new Date(year, month0 + 1, 1))}
-          className="px-3 py-1 text-gray-500"
-        >
+        <button onClick={goToNextMonth} className="px-3 py-1 text-gray-500">
           ＞
         </button>
       </div>

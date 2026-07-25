@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { Category, PaymentMethod, Scope, TransactionType } from '../types'
+import type { Category, PaymentMethod, Scope, TransactionType, TransactionWithDetails } from '../types'
 
 function today(): string {
   const d = new Date()
@@ -9,7 +9,12 @@ function today(): string {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
-export default function InputScreen() {
+interface Props {
+  editTransaction?: TransactionWithDetails | null
+  onEditDone?: () => void
+}
+
+export default function InputScreen({ editTransaction = null, onEditDone }: Props) {
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(today())
@@ -17,6 +22,9 @@ export default function InputScreen() {
   const [scopeId, setScopeId] = useState<number | null>(null)
   const [paymentMethodId, setPaymentMethodId] = useState<number | null>(null)
   const [memo, setMemo] = useState('')
+
+  // 編集対象のトランザクションID(nullなら新規登録モード)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   const [categories, setCategories] = useState<Category[]>([])
   const [scopes, setScopes] = useState<Scope[]>([])
@@ -71,11 +79,28 @@ export default function InputScreen() {
   }, [])
 
   // カテゴリは収入/支出の切り替えに応じて再取得し、選択状態をリセットする
+  // (編集モードの場合は、編集対象のカテゴリを選択した状態にする)
   useEffect(() => {
-    reloadCategories()
+    const selectId =
+      editTransaction && editTransaction.type === type ? editTransaction.category_id : undefined
+    reloadCategories(selectId)
     setShowAddCategory(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type])
+  }, [type, editTransaction])
+
+  // カレンダー画面から編集対象が渡された場合、フォームに反映する
+  useEffect(() => {
+    if (editTransaction) {
+      setType(editTransaction.type)
+      setAmount(String(editTransaction.amount))
+      setDate(editTransaction.transaction_date)
+      setCategoryId(editTransaction.category_id)
+      setScopeId(editTransaction.scope_id)
+      setPaymentMethodId(editTransaction.payment_method_id)
+      setMemo(editTransaction.memo ?? '')
+      setEditingId(editTransaction.id)
+    }
+  }, [editTransaction])
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
@@ -108,7 +133,13 @@ export default function InputScreen() {
     setDate(today())
     setMemo('')
     setPaymentMethodId(null)
+    setEditingId(null)
     // カテゴリ・範囲・種別は連続入力しやすいよう保持する
+  }
+
+  const handleCancelEdit = () => {
+    resetForm()
+    onEditDone?.()
   }
 
   const handleSave = async () => {
@@ -130,7 +161,7 @@ export default function InputScreen() {
 
     setSaving(true)
     try {
-      await api.post('/transactions', {
+      const payload = {
         type,
         amount: amountNum,
         category_id: categoryId,
@@ -138,9 +169,16 @@ export default function InputScreen() {
         payment_method_id: paymentMethodId,
         transaction_date: date,
         memo: memo || null
-      })
+      }
+      if (editingId) {
+        await api.put(`/transactions/${editingId}`, payload)
+        resetForm()
+        onEditDone?.()
+      } else {
+        await api.post('/transactions', payload)
+        resetForm()
+      }
       setSavedMessage(true)
-      resetForm()
       setTimeout(() => setSavedMessage(false), 2000)
     } catch (e) {
       setError('保存に失敗しました。通信環境を確認して再度お試しください。')
@@ -151,7 +189,14 @@ export default function InputScreen() {
 
   return (
     <div className="p-4 space-y-5">
-      <h1 className="text-lg font-bold">収支の入力</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold">{editingId ? '収支の編集' : '収支の入力'}</h1>
+        {editingId && (
+          <button onClick={handleCancelEdit} className="text-sm text-gray-500 underline">
+            編集をやめる
+          </button>
+        )}
+      </div>
 
       {/* 収入/支出 切替 */}
       <div className="flex rounded-lg overflow-hidden border">
@@ -372,7 +417,7 @@ export default function InputScreen() {
         disabled={saving}
         className="w-full bg-green-600 text-white font-bold py-3 rounded-lg disabled:opacity-50"
       >
-        {saving ? '保存中...' : '保存する'}
+        {saving ? '保存中...' : editingId ? '更新する' : '保存する'}
       </button>
     </div>
   )

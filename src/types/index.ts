@@ -46,5 +46,14 @@ export interface Budget {
   amount: number
 }
 
+// GET /api/transactions (期間指定) が返す、表示名を結合したトランザクション
+export interface TransactionWithDetails extends Transaction {
+  category_name: string
+  category_icon: string | null
+  category_color: string
+  scope_name: string
+  payment_method_name: string | null
+}
+
 // 画面下部ナビゲーションのタブ識別子
 export type NavTab = 'input' | 'calendar' | 'report' | 'budget' | 'menu'

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { todayJst } from '../utils/date'
 import CalculatorInput from '../components/CalculatorInput'
+import LoadingOverlay from '../components/LoadingOverlay'
 import { useAppData } from '../contexts/AppDataContext'
 import type { TransactionType, TransactionWithDetails } from '../types'
 
@@ -197,12 +198,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   }
 
   if (loadingMaster) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-sm">
-        <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-        読み込み中...
-      </div>
-    )
+    return <LoadingOverlay text="読み込み中" />
   }
 
   return (
@@ -216,14 +212,9 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
         )}
       </div>
 
-      {(saving || deleting) && (
-        <div className="flex items-center justify-center gap-2 py-2 text-gray-500 text-sm">
-          <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-          {saving ? '保存中...' : '削除中...'}
-        </div>
-      )}
+      {(saving || deleting) && <LoadingOverlay text={saving ? '保存中' : '削除中'} />}
 
-      <div className={`space-y-5 transition-opacity ${saving || deleting ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+      <div className="space-y-5">
 
       {/* 収入/支出 切替 */}
       <div className="flex rounded-lg overflow-hidden border">

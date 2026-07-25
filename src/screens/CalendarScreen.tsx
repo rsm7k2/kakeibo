@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import { nowJstYearMonth } from '../utils/date'
 import { useAppData } from '../contexts/AppDataContext'
 import SwipeableRow from '../components/SwipeableRow'
+import LoadingOverlay from '../components/LoadingOverlay'
 import type { TransactionWithDetails } from '../types'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土']
@@ -185,12 +186,7 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         </div>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center gap-2 py-2 text-gray-500 text-sm">
-          <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-          更新中...
-        </div>
-      )}
+      {loading && <LoadingOverlay text="更新中" />}
 
       {/* 曜日ヘッダー */}
       <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
@@ -240,11 +236,7 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
           <p className="text-sm text-gray-400 py-4 text-center">この条件の支出データはありません</p>
         )}
 
-        <div
-          className={`bg-white border rounded-2xl divide-y overflow-hidden transition-opacity ${
-            loading ? 'opacity-40' : 'opacity-100'
-          }`}
-        >
+        <div className="bg-white border rounded-2xl divide-y overflow-hidden">
           {groupedByDate.map((group) => (
             <div key={group.date}>
               <div className="bg-gray-50 px-3 py-1 text-xs text-gray-500 font-bold">

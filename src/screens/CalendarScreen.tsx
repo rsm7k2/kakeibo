@@ -185,7 +185,12 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
         </div>
       </div>
 
-      {loading && <p className="text-center text-gray-400 text-sm">読み込み中...</p>}
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-2 text-gray-500 text-sm">
+          <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+          更新中...
+        </div>
+      )}
 
       {/* 曜日ヘッダー */}
       <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
@@ -235,7 +240,11 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
           <p className="text-sm text-gray-400 py-4 text-center">この条件の支出データはありません</p>
         )}
 
-        <div className="bg-white border rounded-2xl divide-y overflow-hidden">
+        <div
+          className={`bg-white border rounded-2xl divide-y overflow-hidden transition-opacity ${
+            loading ? 'opacity-40' : 'opacity-100'
+          }`}
+        >
           {groupedByDate.map((group) => (
             <div key={group.date}>
               <div className="bg-gray-50 px-3 py-1 text-xs text-gray-500 font-bold">
@@ -247,6 +256,7 @@ export default function CalendarScreen({ onEditTransaction }: Props) {
                     key={t.id}
                     onClick={() => onEditTransaction(t)}
                     onDelete={() => handleDeleteTransaction(t.id)}
+                    disabled={loading}
                   >
                     <div className="w-full flex items-center gap-2 p-3 text-left">
                       <span

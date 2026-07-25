@@ -10,9 +10,11 @@ interface Props {
   children: ReactNode
   onClick: () => void
   onDelete: () => void
+  /** trueの間はタップ・スワイプ操作を無効化する(データ再取得中の誤操作防止用) */
+  disabled?: boolean
 }
 
-export default function SwipeableRow({ children, onClick, onDelete }: Props) {
+export default function SwipeableRow({ children, onClick, onDelete, disabled = false }: Props) {
   const [translateX, setTranslateX] = useState(0)
   const [dragging, setDragging] = useState(false)
   const startXRef = useRef(0)
@@ -26,6 +28,7 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   // 縦スクロール中に誤って編集画面へ遷移することがなくなる。
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (disabled) return
     startXRef.current = e.clientX
     startYRef.current = e.clientY
     baseXRef.current = translateX
@@ -33,6 +36,7 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   }
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (disabled) return
     const deltaX = e.clientX - startXRef.current
     const deltaY = e.clientY - startYRef.current
 
@@ -61,6 +65,7 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   }
 
   const handlePointerUp = () => {
+    if (disabled) return
     const wasHorizontalDrag = directionRef.current === 'horizontal'
     directionRef.current = null
     setDragging(false)
@@ -71,6 +76,10 @@ export default function SwipeableRow({ children, onClick, onDelete }: Props) {
   }
 
   const handleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault()
+      return
+    }
     if (translateX !== 0) {
       // 削除ボタンが開いた状態でのタップは閉じるだけにする
       e.preventDefault()

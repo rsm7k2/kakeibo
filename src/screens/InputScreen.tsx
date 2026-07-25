@@ -197,7 +197,12 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   }
 
   if (loadingMaster) {
-    return <p className="p-4 text-center text-gray-400 text-sm">読み込み中...</p>
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-gray-500 text-sm">
+        <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+        読み込み中...
+      </div>
+    )
   }
 
   return (
@@ -210,6 +215,15 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
           </button>
         )}
       </div>
+
+      {(saving || deleting) && (
+        <div className="flex items-center justify-center gap-2 py-2 text-gray-500 text-sm">
+          <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+          {saving ? '保存中...' : '削除中...'}
+        </div>
+      )}
+
+      <div className={`space-y-5 transition-opacity ${saving || deleting ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
 
       {/* 収入/支出 切替 */}
       <div className="flex rounded-lg overflow-hidden border">
@@ -441,6 +455,8 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
             </option>
           ))}
         </select>
+      </div>
+
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}

@@ -12,6 +12,7 @@ import {
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { api } from '../api/client'
 import { nowJstYearMonth } from '../utils/date'
+import { scopeBadgeClass } from '../utils/scopeBadge'
 import { useAppData } from '../contexts/AppDataContext'
 import type { TransactionType, TransactionWithDetails } from '../types'
 
@@ -41,9 +42,9 @@ interface MonthBucket {
   total: number
 }
 
-interface DayBucket {
-  day: number
-  total: number
+interface DayGroup {
+  date: string
+  items: TransactionWithDetails[]
 }
 
 function pad2(n: number): string {
@@ -260,8 +261,9 @@ export default function ReportScreen() {
     return buckets
   })()
 
-  // 選択中の月(棒グラフでのバー選択)の日別内訳(月間モードのみ)
-  const dailyBuckets: DayBucket[] = (() => {
+  // 選択中の月(棒グラフでのバー選択)の日別内訳(月間モードのみ)。
+  // カレンダー画面下部の支出一覧と同じ形式(日付ヘッダー+取引行)で表示する。
+  const dailyGroups: DayGroup[] = (() => {
     if (!drilldown || periodType !== 'month' || selectedBarIndex === null) return []
     const bucket = monthBuckets[selectedBarIndex]
     if (!bucket) return []
@@ -270,15 +272,16 @@ export default function ReportScreen() {
       t.type === txType &&
       (scopeFilter === 'all' || t.scope_id === scopeFilter)
     const prefix = `${bucket.year}-${pad2(bucket.month0 + 1)}-`
-    const byDay = new Map<number, number>()
+    const byDate = new Map<string, TransactionWithDetails[]>()
     for (const t of drilldownTx.filter(matches)) {
       if (!t.transaction_date.startsWith(prefix)) continue
-      const day = Number(t.transaction_date.slice(8, 10))
-      byDay.set(day, (byDay.get(day) ?? 0) + t.amount)
+      const list = byDate.get(t.transaction_date) ?? []
+      list.push(t)
+      byDate.set(t.transaction_date, list)
     }
-    return Array.from(byDay.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([day, total]) => ({ day, total }))
+    return Array.from(byDate.entries())
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([date, items]) => ({ date, items }))
   })()
 
   const drilldownTotal = monthBuckets.reduce((s, b) => s + b.total, 0)
@@ -393,13 +396,60 @@ export default function ReportScreen() {
                     : '月を選択してください'}
                 </h3>
                 <div className="bg-white border rounded-2xl divide-y overflow-hidden">
-                  {dailyBuckets.length === 0 && (
+                  {dailyGroups.length === 0 && (
                     <p className="text-sm text-gray-400 py-4 text-center">この月のデータはありません</p>
                   )}
-                  {dailyBuckets.map((d) => (
-                    <div key={d.day} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <span className="text-gray-500">{d.day}日</span>
-                      <span className="font-bold">¥{yen(d.total)}</span>
+                  {dailyGroups.map((group) => (
+                    <div key={group.date}>
+                      <div className="bg-gray-50 px-3 py-1 text-xs text-gray-500 font-bold">{group.date}</div>
+                      <div className="divide-y">
+                        {group.items.map((t) => (
+                          <div key={t.id} className="w-full flex items-center gap-2 p-3 text-left">
+                            <span
+                              className="w-8 h-8 flex items-center justify-center rounded-full text-base shrink-0"
+                              style={{ backgroundColor: t.category_color }}
+                            >
+                              {t.category_icon ?? '•'}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-bold truncate">
+                                {t.category_name}
+                                {t.memo && (
+                                  <span className="text-[10px] text-gray-400 font-normal">
+                                    (
+                                    {t.memo}
+                                    )
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${scopeBadgeClass(t.scope_id)}`}
+                                >
+                                  {t.scope_name}
+                                </span>
+                                {!!t.is_fixed_cost && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                    固定費
+                                  </span>
+                                )}
+                                {t.payment_method_name && (
+                                  <span className="text-[10px] text-gray-400 truncate">
+                                    {t.payment_method_name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div
+                              className={`text-sm font-bold shrink-0 ${
+                                t.type === 'expense' ? 'text-red-500' : 'text-green-600'
+                              }`}
+                            >
+                              {t.type === 'expense' ? '-' : '+'}¥{yen(t.amount)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

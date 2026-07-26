@@ -15,7 +15,7 @@ interface Props {
 
 export default function BottomNav({ active, onChange }: Props) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 flex border-t bg-white pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t bg-white pb-[env(safe-area-inset-bottom)]">
       {TABS.map((tab) => (
         <button
           key={tab.key}

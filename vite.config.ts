@@ -13,10 +13,10 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',
-        theme_color: '#4CAF50',
+        theme_color: '#0d4bb8',
         icons: [
-          // 実装フェーズでアプリアイコン画像(192x192, 512x512)を
-          // public/ 配下に配置し、パスをここに指定してください
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       }
     })

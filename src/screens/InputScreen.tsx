@@ -208,7 +208,7 @@ export default function InputScreen({ editTransaction = null, onEditDone }: Prop
   }
 
   return (
-    <div className="p-4 space-y-5">
+    <div className="p-4 space-y-5 overflow-x-hidden" style={{ touchAction: 'pan-y' }}>
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold">{editingId ? '収支の編集' : '収支の入力'}</h1>
         {editingId && (

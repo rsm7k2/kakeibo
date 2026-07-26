@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import BottomNav from './components/BottomNav'
 import InputScreen from './screens/InputScreen'
 import CalendarScreen from './screens/CalendarScreen'
@@ -25,6 +25,11 @@ function AppContent() {
     setEditingTransaction(null)
     setActiveTab('calendar')
   }
+
+  // フッターでタブを切り替えた際、前の画面のスクロール位置を引き継がず必ず上部から表示する
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [activeTab])
 
   // 画面はアンマウントせず、CSSの表示/非表示切り替えで保持する。
   // これにより、タブを切り替えるたびにカテゴリ・範囲・支払い方法・収支データを
